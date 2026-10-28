@@ -22,6 +22,9 @@ class LocalWorkflow(unittest.TestCase):
         (self.source / 'HISTORY.rc').write_text('EXPID: test\n')
         self.geos = self.base / 'geos'
         (self.geos / 'plots').mkdir(parents=True)
+        rcdir = self.geos / 'plots/VERIFICATION_RCS'
+        rcdir.mkdir()
+        (rcdir / 'VERIFICATION.ISCCP.rc').write_text('')
         self.quickplot = self.geos / 'plots/quickplot'
         self.quickplot.write_text('#!/bin/sh\nexit 0\n')
         self.quickplot.chmod(0o755)
@@ -60,6 +63,12 @@ class LocalWorkflow(unittest.TestCase):
         (self.base / 'portrait.list').write_text('')
         self.assertNotEqual(self.prepare().returncode, 0)
         self.assertFalse((self.run / 'plan.json').exists())
+
+    def test_references_loaded_from_directory(self):
+        self.assertEqual(self.prepare().returncode, 0)
+        plan = json.loads((self.run / 'plan.json').read_text())
+        self.assertIn('ISCCP', plan['allowed_verification_rcs'])
+        self.assertIn('MERRA2', plan['allowed_verification_rcs'])
 
     def test_runner_records_failure_and_timeout(self):
         self.assertEqual(self.prepare().returncode, 0)
