@@ -119,3 +119,30 @@ rejection, worker failure, and timeout handling using a fake QuickPlot executabl
 Actual csh enumeration, GrADS rendering, NetCDF input and HPC execution still
 require a site test. The shared QuickPlot may invoke its own `configure` at runtime;
 this package leaves that existing behavior unchanged.
+
+## Ready-to-submit Discover batch script
+
+`gcm_smallplot.j` adapts Donifan's existing csh batch environment for JJA 2009.
+It retains `mil`, account `g0620`, partition `preops`, qos `atmtest`, GEOS modules,
+and an eight-hour limit. It requests one task with two CPUs and 64 GiB memory;
+the memory request is a starting estimate, not a measured requirement or a
+verified partition policy. Increase it if accounting shows memory pressure.
+
+```csh
+cd /home/dbarahon/nobck/small_quickplot
+git pull
+sbatch gcm_smallplot.j
+```
+
+Submit from the repository directory: the script locates the package using
+`SLURM_SUBMIT_DIR`. Edit `season`, `begdate`, `enddate`, and experiment paths for
+another run. Each job creates a unique directory under `$EXPDIR/plot` using the
+Slurm job ID. It prepares the plan and runs it within the same allocation.
+The scheduler log is `smallplot.<jobid>.out` in the submission directory.
+
+There is one `srun` controller, not 120 copies of the runner. Worker count follows
+`SLURM_CPUS_PER_TASK` (two by default). Automatic web publication is omitted:
+the existing publishing job may read a different output directory, and upstream
+QuickPlot exit codes do not establish that every image is complete. Review the
+new run directory before publishing. No existing experiment scripts are edited.
+Actual csh/Slurm execution and site resource acceptance require a Discover test.
