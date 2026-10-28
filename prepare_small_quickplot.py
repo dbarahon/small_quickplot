@@ -6,11 +6,40 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import shutil
 import subprocess
 import sys
 
 from filter_quickplot import PROFILE, signature
+
+RC_PATTERN = re.compile(r'^VERIFICATION\.(.+)\.rc$')
+
+
+def allowed_rcs(directory):
+    if not directory.is_dir():
+        raise ValueError('Missing verification directory: ' + str(directory))
+    names = {m.group(1).upper() for f in directory.iterdir()
+             if (m := RC_PATTERN.match(f.name)) and f.is_file()}
+    if not names:
+        raise ValueError('No VERIFICATION.*.rc files found in ' + str(directory))
+    return names | {'MERRA2', 'MERRA-2'}
+
+
+def mapped_exports(command):
+    tokens = shlex.split(command)
+    if '-EXPORT' not in tokens:
+        return set()
+    start = tokens.index('-EXPORT') + 1
+    return set(token.upper() for token in tokens[start:]
+               if not token.startswith('-') and ':' in token and
+               not token.startswith('$'))
+
+
+def mapped_rc(command):
+    tokens = shlex.split(command)
+    return tokens[tokens.index('-RC') + 1].upper() if '-RC' in tokens else None
+
 
 SEASONS = 'JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC DJF MAM JJA SON ANN'.split()
 
@@ -32,7 +61,16 @@ def main():
     p.add_argument('--portrait-map', type=Path)
     p.add_argument('--landscape-map', type=Path)
     p.add_argument('--history', type=Path)
+    p.add_argument('--verification-dir', type=Path)
+    p.add_argument('--collection', action='append', default=[], metavar='COLLECTION')
+    p.add_argument('--variable', action='append', default=[], metavar='VAR:COLLECTION')
     a = p.parse_args()
+    for item in a.variable:
+        if not re.fullmatch(r'[A-Za-z0-9_]+:[A-Za-z0-9_]+', item):
+            p.error('--variable must be VAR:COLLECTION')
+    for item in a.collection:
+        if not re.fullmatch(r'[A-Za-z0-9_]+', item):
+            p.error('--collection must be a collection name')
     if a.begdate > a.enddate:
         p.error('begdate must not follow enddate')
     if not a.geosutil:
@@ -80,10 +118,29 @@ def main():
                 lines.append(line)
                 available.setdefault((kind, signature(m[2])), []).append((m[1], line))
         (run / (kind.lower() + '.list')).write_text('\n'.join(lines) + '\n')
+    allowed = allowed_rcs((a.verification_dir or geosutil / 'plots/VERIFICATION_RCS').resolve())
+    selected_keys = list(PROFILE)
+    requested_collections = {c.upper() for c in a.collection}
+    for key in available:
+        if key in selected_keys or ' run genplot' not in key[1]:
+            continue
+        exports = mapped_exports(key[1])
+        if any(x.split(':', 1)[-1] in requested_collections for x in exports) or any(x.upper() in exports for x in a.variable):
+            selected_keys.append(key)
+    matched = set()
+    for key in selected_keys:
+        exports = mapped_exports(key[1])
+        matched.update(x for x in a.variable if x.upper() in exports)
+    if set(a.variable) - matched:
+        raise ValueError('Variables absent from installed mappings: ' + str(sorted(set(a.variable) - matched)))
     tasks = []
     audit = []
     output = run / 'plots'
-    for key in PROFILE:
+    for key in selected_keys:
+        rc = mapped_rc(key[1])
+        if rc and rc not in allowed:
+            print('SKIP unsupported explicit reference: ' + rc)
+            continue
         matches = available.get(key, [])
         if len(matches) != 1:
             raise ValueError('Missing or ambiguous diagnostic: ' + repr(key) +
@@ -105,9 +162,10 @@ def main():
     for name in ['portrait.script', 'landscape.script']:
         path = geosutil / 'plots' / name
         if path.is_file(): hashes[name] = hashlib.sha256(path.read_bytes()).hexdigest()
-    plan = {'version': 1, 'geosutil': str(geosutil), 'run_dir': str(run),
+    plan = {'version': 1, 'allowed_verification_rcs': sorted(allowed), 'geosutil': str(geosutil), 'run_dir': str(run),
             'driver_sha256': hashes, 'tasks': tasks}
     (run / 'plan.json').write_text(json.dumps(plan, indent=2) + '\n')
+    print('Available verification RCs: ' + ', '.join(sorted(allowed)))
     print(f'Prepared {len(tasks)} tasks in {run}/plan.json. No plots run; no jobs submitted.')
     print('Review selected.mapping.txt, then run run_small_quickplot.csh inside a compute allocation.')
 

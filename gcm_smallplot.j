@@ -64,7 +64,7 @@ if ( $?SLURM_CPUS_PER_TASK ) set workers = "$SLURM_CPUS_PER_TASK"
 set rundir = "$EXPDIR/plot/small_${season}_${begdate}_${enddate}_${SLURM_JOB_ID}"
 echo "Diagnostic run directory: $rundir"
 
-# No MASTERLIST required. List-only enumeration, then a 31-task plan.
+# No MASTERLIST required. Uses installed verification RCs and a reduced profile.
 # If enumeration lacks plots/.quickplotrc, append these options:
 # --portrait-map $EXPDIR/plot/portrait.list --landscape-map $EXPDIR/plot/landscape.list
 csh "$repo/prepare_small_quickplot.csh" \
