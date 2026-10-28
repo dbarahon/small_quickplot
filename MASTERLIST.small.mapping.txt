@@ -1,0 +1,31 @@
+if ( plot == PORTRAIT.1 ) grads -p -c run /home/dbarahon/nobck/models/GEOSgcm/install/plots/zcmp/progz U DYN $EXPID $OUTPUT no_debug $SEASON 
+if ( plot == PORTRAIT.3 ) grads -p -c run /home/dbarahon/nobck/models/GEOSgcm/install/plots/zcmp/progz T DYN $EXPID $OUTPUT no_debug $SEASON 
+if ( plot == PORTRAIT.4 ) grads -p -c run /home/dbarahon/nobck/models/GEOSgcm/install/plots/zcmp/progz Q MOIST $EXPID $OUTPUT no_debug $SEASON 
+if ( plot == PORTRAIT.5 ) grads -p -c run /home/dbarahon/nobck/models/GEOSgcm/install/plots/zcmp/progz RH2 MOIST $EXPID $OUTPUT no_debug $SEASON 
+if ( plot == PORTRAIT.7 ) grads -p -c run /home/dbarahon/nobck/models/GEOSgcm/install/plots/zcmp/progz OMEGA DYN $EXPID $OUTPUT no_debug $SEASON 
+if ( plot == PORTRAIT.13 ) grads -p -c run /home/dbarahon/nobck/models/GEOSgcm/install/plots/zcmp/progz QLTOT AGCM $EXPID $OUTPUT no_debug $SEASON 
+if ( plot == PORTRAIT.14 ) grads -p -c run /home/dbarahon/nobck/models/GEOSgcm/install/plots/zcmp/progz QITOT AGCM $EXPID $OUTPUT no_debug $SEASON 
+if ( plot == PORTRAIT.38 ) grads -p -c run /home/dbarahon/nobck/models/GEOSgcm/install/plots/hcmp/hcmp2 SLP DYN 1000 $EXPID $OUTPUT no_debug $SEASON 
+if ( plot == PORTRAIT.41 ) grads -p -c run /home/dbarahon/nobck/models/GEOSgcm/install/plots/hcmp/hcmp2 U DYN 850 $EXPID $OUTPUT no_debug $SEASON 
+if ( plot == PORTRAIT.48 ) grads -p -c run /home/dbarahon/nobck/models/GEOSgcm/install/plots/hcmp/hcmp2 U DYN 200 $EXPID $OUTPUT no_debug $SEASON 
+if ( plot == PORTRAIT.4828 ) grads -p -c run genplot -NAME osr      -EXPID $EXPID -EXPORT RSR:SOLAR                -OUTPUT $OUTPUT -DEBUG no_debug -SEASON $SEASON 
+if ( plot == PORTRAIT.4830 ) grads -p -c run genplot -NAME osrcf    -EXPID $EXPID -EXPORT RSC:SOLAR RSR:SOLAR      -OUTPUT $OUTPUT -DEBUG no_debug -SEASON $SEASON 
+if ( plot == PORTRAIT.4834 ) grads -p -c run genplot -EXPORT   OLC:IRRAD OLR:IRRAD OSRCLR:SOLAR OSR:SOLAR -NAME toacf     -EXPID $EXPID -OUTPUT $OUTPUT -DEBUG no_debug -SEASON $SEASON 
+if ( plot == PORTRAIT.4836 ) grads -p -c run genplot -EXPORT   OLR:IRRAD  -NAME olr      -EXPID $EXPID -OUTPUT $OUTPUT -DEBUG no_debug -SEASON $SEASON 
+if ( plot == PORTRAIT.4839 ) grads -p -c run genplot -EXPORT   OLC:IRRAD  OLR:IRRAD                       -NAME olrcf       -EXPID $EXPID -OUTPUT $OUTPUT -DEBUG no_debug -SEASON $SEASON 
+if ( plot == PORTRAIT.4858 ) grads -p -c run genplot -NAME nettoa   -EXPID $EXPID -EXPORT RSR:SOLAR OLR:IRRAD    -OBS RSR:SOLAR OLR:IRRAD -OUTPUT $OUTPUT -DEBUG no_debug -SEASON $SEASON 
+if ( plot == PORTRAIT.4861 ) grads -p -c run genplot_2G -NAME TOTEXTTAU   -EXPID $EXPID -EXPORT TOTEXTTAU:GOCART   -ALT_EXPORT TOTEXTTAU:GOCART2G   -MATH LOG -SEASON $SEASON -OUTPUT $OUTPUT -DEBUG no_debug  
+if ( plot == PORTRAIT.5103 ) grads -p -c run genplot -EXPORT CN_PRCP:MOIST LS_PRCP:MOIST AN_PRCP:MOIST -OBS TPREC:MOIST -NAME precip  -EXPID $EXPID -OUTPUT $OUTPUT -DEBUG no_debug -SCALE 86400                    -SEASON $SEASON 
+if ( plot == PORTRAIT.5105 ) grads -p -c run genplot -EXPORT CN_PRCP:MOIST AN_PRCP:MOIST -OBS CN_PRCP:MOIST -NAME precipcn  -EXPID $EXPID -OUTPUT $OUTPUT -DEBUG no_debug -SCALE 86400 -SEASON $SEASON 
+if ( plot == PORTRAIT.5106 ) grads -p -c run genplot -EXPORT LS_PRCP:MOIST               -OBS LS_PRCP:MOIST -NAME precipls  -EXPID $EXPID -OUTPUT $OUTPUT -DEBUG no_debug -SCALE 86400 -SEASON $SEASON 
+if ( plot == PORTRAIT.5114 ) grads -p -c run genplot -EXPORT TQL:AGCM           -OBS LWP:MOIST  -NAME lwp  -EXPID $EXPID -OUTPUT $OUTPUT -DEBUG no_debug -SEASON $SEASON 
+if ( plot == PORTRAIT.5115 ) grads -p -c run genplot -EXPORT TQV:AGCM                           -NAME tpw  -EXPID $EXPID -OUTPUT $OUTPUT -DEBUG no_debug -SEASON $SEASON 
+if ( plot == PORTRAIT.5117 ) grads -p -c run genplot -EXPORT TQI:AGCM                           -NAME tqi  -EXPID $EXPID -OUTPUT $OUTPUT -DEBUG no_debug -SEASON $SEASON 
+if ( plot == PORTRAIT.5148 ) grads -p -c run genplot -EXPORT CLDLO:SOLAR   -NAME cldlo   -EXPID $EXPID -OUTPUT $OUTPUT -DEBUG no_debug                  -SEASON $SEASON 
+if ( plot == PORTRAIT.5149 ) grads -p -c run genplot -EXPORT CLDMD:SOLAR   -NAME cldmd   -EXPID $EXPID -OUTPUT $OUTPUT -DEBUG no_debug                  -SEASON $SEASON 
+if ( plot == PORTRAIT.5150 ) grads -p -c run genplot -EXPORT CLDHI:SOLAR   -NAME cldhi   -EXPID $EXPID -OUTPUT $OUTPUT -DEBUG no_debug                  -SEASON $SEASON 
+if ( plot == PORTRAIT.5152 ) grads -p -c run genplot -EXPORT CLDTT:SOLAR   -NAME cldtt   -EXPID $EXPID -OUTPUT $OUTPUT -DEBUG no_debug        -RC ISCCP -SEASON $SEASON 
+if ( plot == LANDSCAPE.1 ) grads -l -c run /home/dbarahon/nobck/models/GEOSgcm/install/plots/tseries/rad        $EXPID $OUTPUT no_debug 
+if ( plot == LANDSCAPE.3 ) grads -l -c run /home/dbarahon/nobck/models/GEOSgcm/install/plots/tseries/ps         $EXPID $OUTPUT no_debug 
+if ( plot == LANDSCAPE.4 ) grads -l -c run /home/dbarahon/nobck/models/GEOSgcm/install/plots/tseries/pme        $EXPID $OUTPUT no_debug 
+if ( plot == LANDSCAPE.5 ) grads -l -c run /home/dbarahon/nobck/models/GEOSgcm/install/plots/tseries/tpw        $EXPID $OUTPUT no_debug 
