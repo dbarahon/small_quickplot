@@ -11,6 +11,12 @@ spec = importlib.util.spec_from_file_location('filter_quickplot', ROOT / 'filter
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 
+spec_prepare = importlib.util.spec_from_file_location('prepare_small_quickplot', ROOT / 'prepare_small_quickplot.py')
+prepare_module = importlib.util.module_from_spec(spec_prepare)
+sys.modules['filter_quickplot'] = module
+spec_prepare.loader.exec_module(prepare_module)
+module_priority = prepare_module.plot_priority
+
 
 class LocalWorkflow(unittest.TestCase):
     def setUp(self):
@@ -69,6 +75,21 @@ class LocalWorkflow(unittest.TestCase):
         plan = json.loads((self.run / 'plan.json').read_text())
         self.assertIn('ISCCP', plan['allowed_verification_rcs'])
         self.assertIn('MERRA2', plan['allowed_verification_rcs'])
+
+    def test_priority_and_condensate_hdiag(self):
+        # Add installed hdiag_* mappings to the fixture; do not guess IDs.
+        portrait = self.base / 'portrait.list'
+        with portrait.open('a') as out:
+            out.write('if ( plot == PORTRAIT.900 ) grads -p -c run hdiag_ql QLTOT AGCM $EXPID $OUTPUT no_debug $SEASON\\n')
+            out.write('if ( plot == PORTRAIT.901 ) grads -p -c run hdiag_qi QITOT AGCM $EXPID $OUTPUT no_debug $SEASON\\n')
+        self.assertEqual(self.prepare().returncode, 0)
+        plan = json.loads((self.run / 'plan.json').read_text())
+        self.assertEqual(len(plan['tasks']), 33)
+        mapping = [task['mapping'].lower() for task in plan['tasks']]
+        self.assertTrue(any('hdiag_ql' in x for x in mapping))
+        self.assertTrue(any('hdiag_qi' in x for x in mapping))
+        priorities = [module_priority(x) for x in mapping]
+        self.assertEqual(priorities, sorted(priorities))
 
     def test_runner_records_failure_and_timeout(self):
         self.assertEqual(self.prepare().returncode, 0)

@@ -24,7 +24,7 @@ Your current directory lists CERES_EBAF-TOA_Ed4.0, ERA5, GPCP, ISCCP, MAC-LWP an
 
 **Limitation:** GEOS QuickPlot can produce implicit reference comparisons inside a single mapped task. This utility cannot guarantee filtering *those internal comparisons* without inspecting/changing your installed QuickPlot scripts. It does not edit the shared reference catalogs or claim that unavailable references have been disabled internally.
 
-## Include variables from a collection
+## Include existing diagnostics by GEOS component
 
 ```csh
 csh prepare_small_quickplot.csh --source $expdir --season JJA \
@@ -32,7 +32,7 @@ csh prepare_small_quickplot.csh --source $expdir --season JJA \
     --collection GOCART --variable TOTEXTTAU:GOCART
 ```
 
-Repeat `--collection COLLECTION` to include all mapped `genplot` diagnostics exporting that collection; repeat `--variable VAR:COLLECTION` to select a specific mapped export. Additional diagnostics must exist in the installed portrait/landscape mappings. A missing requested variable is an error rather than an invented or invalid task ID. The default 31-diagnostic profile remains selected.
+In the current interface, `--collection` actually takes a GEOS **component** (such as `AGCM`, `DYN`, or `MOIST`), not an output collection such as `geosgcm_prog`. Likewise, `--variable VAR:COLLECTION` is really `VAR:COMPONENT`, for example `QLTOT:AGCM`. Repeat these options to select additional mapped diagnostics. Additional diagnostics must exist in the installed portrait/landscape mappings. A missing requested variable is an error rather than an invented or invalid task ID. The default 31-diagnostic profile remains selected.
 
 ## Batch jobs and results
 
@@ -45,3 +45,7 @@ csh run_small_quickplot.csh $rundir/plan.json --workers 2 --resume
 ```
 
 Review plots and logs: upstream QuickPlot may return success despite rendering failures. If the installed plot drivers have changed, prepare a new plan.
+
+## Execution order and condensate hdiag
+
+The queue puts TOA radiation and the global radiation time series first, followed by horizontal cloud fraction, LWP and TQI plots. Mapped `hdiag_*` plots of liquid/ice condensate (such as QLTOT and QITOT) follow, with the remaining diagnostics afterward. Matching is based on the installed drivers and no plot IDs are assumed. If no matching `hdiag_*` command is exposed, preparation prints a warning and proceeds with the available diagnostics. Parallel workers may finish in a different order from the submission queue.
