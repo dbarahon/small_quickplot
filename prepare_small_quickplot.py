@@ -41,6 +41,41 @@ def mapped_rc(command):
     return tokens[tokens.index('-RC') + 1].upper() if '-RC' in tokens else None
 
 
+
+CONDENSATE_NAMES = {'QL', 'QI', 'QLTOT', 'QITOT', 'CLDLIQ', 'CLDICE', 'QLCN', 'QICN'}
+
+
+def hdiag_condensate(command):
+    """Recognize installed hdiag_* drivers for liquid/ice variables."""
+    tokens = shlex.split(command)
+    names = [token.lower() for token in tokens]
+    if not any(token.startswith('hdiag_') for token in names):
+        return False
+    return any(token.upper().split(':', 1)[0] in CONDENSATE_NAMES
+               for token in tokens)
+
+
+def plot_priority(command):
+    """Queue radiation first, horizontal cloud next, then condensate hdiag."""
+    tokens = shlex.split(command)
+    lowered = [t.lower() for t in tokens]
+    if 'run' in lowered:
+        index = lowered.index('run')
+        driver = lowered[index + 1].lower() if len(lowered) > index + 1 else ''
+    else:
+        driver = ''
+    if driver == 'rad' or (
+        driver.startswith('genplot') and any(
+            x in lowered for x in ('osr', 'osrcf', 'toacf', 'olr', 'olrcf', 'nettoa'))):
+        return 0
+    if driver.startswith('genplot') and any(
+        x in lowered for x in ('cldlo', 'cldmd', 'cldhi', 'cldtt', 'lwp', 'tqi')):
+        return 1
+    if hdiag_condensate(command):
+        return 2
+    return 3
+
+
 SEASONS = 'JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC DJF MAM JJA SON ANN'.split()
 
 
@@ -127,6 +162,13 @@ def main():
         exports = mapped_exports(key[1])
         if any(x.split(':', 1)[-1] in requested_collections for x in exports) or any(x.upper() in exports for x in a.variable):
             selected_keys.append(key)
+    # Include hdiag liquid/ice condensate when the installed drivers expose them.
+    hdiag_keys = [key for key in available if hdiag_condensate(key[1])]
+    selected_keys.extend(key for key in hdiag_keys if key not in selected_keys)
+    if not hdiag_keys:
+        print('WARNING: no mapped hdiag_ condensate diagnostics found; inspect portrait.list')
+    # Stable order within each priority group.
+    selected_keys.sort(key=lambda key: plot_priority(key[1]))
     matched = set()
     for key in selected_keys:
         exports = mapped_exports(key[1])
