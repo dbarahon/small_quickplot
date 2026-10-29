@@ -13,9 +13,6 @@ season = subwrd(args,6)
 'set display color white'
 'set grads off'
 'set mpdset hires'
-'set lon 0 360'
-'set lat -90 90'
-
 'run getvar 'EXPORT' 'GC
 qname = subwrd(result,1)
 qfile = subwrd(result,2)
@@ -35,8 +32,22 @@ begdate = result
 enddate = result
 say 'Model-only 'EXPORT':'GC' at 'level' season='season
 say 'Dates: 'begdate' to 'enddate
-* Average directly over requested dates; no intermediate NetCDF export.
-'define qmean = ave('qname'*'scale',t='begdate',t='enddate')'
+* GrADS ave() requires numeric t indices, not formatted calendar dates.
+* Set the valid time range first, then query its numeric endpoints.
+'set time 'begdate' 'enddate
+'getinfo tmin'
+tmin = result
+'getinfo tmax'
+tmax = result
+say 'Averaging time indices: 'tmin' to 'tmax
+if (tmin < 1 | tmax < tmin)
+  say 'ERROR: invalid time indices for model averaging'
+  return
+endif
+* Use numeric indices for the time dimension and select a fixed time
+* before drawing the time-averaged two-dimensional field.
+'define qmean = ave('qname'*'scale',t='tmin',t='tmax')'
+'set t 'tmin
 'set gxout shaded'
 'clear'
 'd qmean'
