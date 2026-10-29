@@ -63,7 +63,7 @@ def choose(data, requested):
 
 def create_tasks(data, names, levels, zonal, comparisons):
     # Resolve duplicates deterministically: prog first, then HISTORY.rc order.
-    # Output belongs to the winning collection, even when requested via another.
+    # Record the preferred owner while keeping output under the requested collection.
     priority = (['geosgcm_prog'] if 'geosgcm_prog' in data else []) + [
         name for name in data if name != 'geosgcm_prog']
     owner = {}
