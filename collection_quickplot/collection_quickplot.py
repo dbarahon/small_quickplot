@@ -139,7 +139,7 @@ def run_task(task, config):
         logtext = (work / 'run.log').read_text(errors='replace')
         if any(x in logtext for x in ('Undefined variable.', 'Error opening', 'Syntax Error',
                                       'Command not found.', 'ERROR: GrADS executable',
-                                      'gadsdf:', 'ga-> [EOF]', 'Request is completely outside file limits',
+                                      'gadsdf:', 'Request is completely outside file limits',
                                       'Cannot contour grid - all undefined values',
                                       'SET Error:', 'DEFINE error:', 'ERROR:')):
             state = 'failed'
