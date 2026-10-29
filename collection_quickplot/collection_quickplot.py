@@ -62,29 +62,36 @@ def choose(data, requested):
 
 
 def create_tasks(data, names, levels, zonal, comparisons):
-    # getvar searches by EXPORT:COMPONENT, so refuse collisions across selected/nonselected collections.
-    owners = {}
-    for col, fields in data.items():
-        for f in fields:
-            owners.setdefault((f['export'], f['component']), set()).add(col)
+    # Resolve duplicates deterministically: prog first, then HISTORY.rc order.
+    # Output belongs to the winning collection, even when requested via another.
+    priority = (['geosgcm_prog'] if 'geosgcm_prog' in data else []) + [
+        name for name in data if name != 'geosgcm_prog']
+    owner = {}
+    for col in priority:
+        for field in data[col]:
+            owner.setdefault((field['export'], field['component']), col)
     tasks = []
+    seen = set()
     for col in names:
         for field in data[col]:
             key = (field['export'], field['component'])
-            if len(owners[key]) > 1:
-                raise ValueError('Ambiguous ' + ':'.join(key) + ' in ' + ', '.join(sorted(owners[key])) +
-                                 '; GEOS getvar cannot identify it by collection')
+            if key in seen:
+                continue
+            seen.add(key)
             var, comp = key
-            # Dimension is not defined in HISTORY.rc: use level metadata as a preliminary classification.
-            # For each field, a surface genplot is the baseline; optional pressure plots explicitly requested.
-            tasks.append({'collection': col, 'variable': var, 'component': comp,
-                          'kind': 'map', 'level': None, 'compare': bool(comparisons)})
+            actual = owner[key]
+            if actual != col:
+                print(f'INFO: {var}:{comp} requested via {col}; '
+                      f'GEOS getvar priority resolves to {actual}')
+            # Keep outputs grouped under requested collection; ownership is explicit.
+            common = {'collection': col, 'resolved_collection': actual,
+                      'variable': var, 'component': comp,
+                      'compare': bool(comparisons)}
+            tasks.append(dict(common, kind='map', level=None))
             for lev in levels:
-                tasks.append({'collection': col, 'variable': var, 'component': comp,
-                              'kind': 'level', 'level': lev, 'compare': bool(comparisons)})
+                tasks.append(dict(common, kind='level', level=lev))
             if zonal:
-                tasks.append({'collection': col, 'variable': var, 'component': comp,
-                              'kind': 'zonal', 'level': None, 'compare': bool(comparisons)})
+                tasks.append(dict(common, kind='zonal', level=None))
     return tasks
 
 
