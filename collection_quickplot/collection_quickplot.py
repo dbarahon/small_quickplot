@@ -96,13 +96,17 @@ def create_tasks(data, names, levels, zonal, comparisons):
     return tasks
 
 
-def task_command(task, expid, season, output, genplot_script='genplot'):
+def task_command(task, expid, season, output, geosutil):
+    """Use the legacy GEOS scripts that work with GEOS-configured OpenGrADS."""
     var, comp = task['variable'], task['component']
-    if task['kind'] == 'map':
-        return f'run {genplot_script} -NAME {var} -EXPID {expid} -EXPORT {var}:{comp} -OUTPUT {output} -DEBUG no_debug -SEASON {season}'
-    if task['kind'] == 'level':
-        return f'run gencmp -EXPID {expid} -EXPORT {var}:{comp} -LEVEL {task["level"]} -OUTPUT {output} -DEBUG no_debug -SEASON {season}'
-    return f'run progz {var} {comp} {expid} {output} no_debug {season}'
+    if task['kind'] == 'zonal':
+        script = Path(geosutil) / 'plots/zcmp/progz'
+        return f'run {script} {var} {comp} {expid} {output} no_debug {season}'
+    script = Path(geosutil) / 'plots/hcmp/hcmp2'
+    # hcmp2 always requires a level; 1000 hPa is the legacy default for
+    # nominally 2D fields. Explicit --levels override this for level tasks.
+    level = task['level'] if task['kind'] == 'level' else '1000'
+    return f'run {script} {var} {comp} {level} {expid} {output} no_debug {season}'
 
 
 def run_task(task, config):
@@ -110,11 +114,11 @@ def run_task(task, config):
     tag = f'{var}_{comp}_{task["kind"]}' + (f'_{task["level"]}' if task['level'] else '')
     work = Path(config['out']) / col / tag
     work.mkdir(parents=True, exist_ok=True)
-    command = task_command(task, config['expid'], config['season'], str(Path(config['out']) / col), config['genplot_script'])
+    command = task_command(task, config['expid'], config['season'], str(Path(config['out']) / col), config['geosutil'])
     env = os.environ.copy()
     env.update(GEOSUTIL=config['geosutil'], SOURCE=config['source'], HISTORYRC=config['history'],
                CMPEXP=' '.join(p + ':M' for p in config['compare']) + ' NULL',
-               CMPEXP_ONLY='TRUE', CLIM='false', TAYLOR='false', STD_DEV='false',
+               CMPEXP_ONLY='FALSE', CLIM='false', TAYLOR='false', STD_DEV='false',
                TBEG=config['begdate'], TEND=config['enddate'], SEASONS=config['season'],
                LONSENV='0 360', LATSENV='-90 90', CINTDIFF='ON',
                PLOTS_DIR=str(Path(config['out']) / col), GRADSX=config['gradsx'], DDFFILE='NULL')
@@ -134,6 +138,12 @@ def run_task(task, config):
             state = 'failed'
     except subprocess.TimeoutExpired:
         state = 'timeout'
+    # GrADS can exit successfully without rendering a single graphic.
+    graphics = [str(p) for p in (Path(config['out']) / col).glob('*.gif')]
+    if state == 'ok' and not graphics:
+        state = 'failed'
+        with (work / 'run.log').open('a') as log:
+            log.write('\\nERROR: no GIF output detected in collection directory\\n')
     logpath = work / 'run.log'
     if state == 'ok' and not config['keep_workdirs']:
         logs = Path(config['out']) / 'logs' / col
@@ -187,10 +197,13 @@ def main(argv=None):
     if any(not re.fullmatch(r'[0-9]+(?:\.[0-9]+)?', x) for x in levels):
         p.error('Pressure levels must be positive numbers')
     tasks = create_tasks(data, names, levels, a.zonal, a.compare)
+    for script_name in ('plots/hcmp/hcmp2', 'plots/zcmp/progz'):
+        if not (a.geosutil / script_name).is_file():
+            p.error('Required GEOS plotting script missing: ' + script_name)
     out = a.output.resolve()
     out.mkdir(parents=True, exist_ok=False)
-    # Use the unmodified GEOS plotting script and its configured GrADS runtime.
-    config = {'genplot_script': 'genplot', 'out': str(out), 'source': str(source), 'history': str(rc),
+    # Use the unmodified GEOS plotting scripts and configured GrADS runtime.
+    config = {'out': str(out), 'source': str(source), 'history': str(rc),
               'geosutil': str(a.geosutil.resolve()), 'expid': expmatch.group(1),
               'season': a.season, 'begdate': a.begdate, 'enddate': a.enddate,
               'compare': [str(x.resolve()) for x in a.compare], 'gradsx': a.gradsx,
