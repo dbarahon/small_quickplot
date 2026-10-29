@@ -124,6 +124,7 @@ def run_task(task, config):
                PLOTS_DIR=str(Path(config['out']) / col), GRADSX=config['gradsx'], DDFFILE='NULL')
     launcher = Path(__file__).with_name('run_grads.csh')
     cmd = ['tcsh', '-f', str(launcher), config['geosutil'], config['source'], config['history'], config['gradsx'], command]
+    existing_graphics = {p.resolve() for p in (Path(config['out']) / col).glob('*.gif')}
     t0 = time.monotonic()
     try:
         with (work / 'run.log').open('w') as log:
@@ -139,7 +140,8 @@ def run_task(task, config):
     except subprocess.TimeoutExpired:
         state = 'timeout'
     # GrADS can exit successfully without rendering a single graphic.
-    graphics = [str(p) for p in (Path(config['out']) / col).glob('*.gif')]
+    graphics = [str(p) for p in (Path(config['out']) / col).glob('*.gif')
+                if p.resolve() not in existing_graphics]
     if state == 'ok' and not graphics:
         state = 'failed'
         with (work / 'run.log').open('a') as log:
@@ -152,7 +154,8 @@ def run_task(task, config):
         shutil.copy2(logpath, saved)
         shutil.rmtree(work)
         logpath = saved
-    return dict(task=task, state=state, seconds=round(time.monotonic()-t0, 2), log=str(logpath))
+    return dict(task=task, state=state, graphics=graphics,
+                seconds=round(time.monotonic()-t0, 2), log=str(logpath))
 
 
 def main(argv=None):
@@ -225,7 +228,7 @@ def main(argv=None):
         results.extend(pool.map(lambda task: run_task(task, config), tasks[1:]))
     (out/'summary.json').write_text(json.dumps(results, indent=2))
     failures = sum(x['state'] != 'ok' for x in results)
-    print(f'{len(results) - failures}/{len(results)} commands exited zero; inspect plot files and logs.')
+    print(f'{len(results) - failures}/{len(results)} tasks produced new GIFs without detected errors.')
     return 1 if failures else 0
 
 
