@@ -130,7 +130,8 @@ def run_task(task, config):
         # GrADS frequently returns zero even after a script/interpreter error.
         logtext = (work / 'run.log').read_text(errors='replace')
         if any(x in logtext for x in ('Undefined variable.', 'Error opening', 'Syntax Error',
-                                      'Command not found.', 'ERROR: GrADS executable')):
+                                      'Command not found.', 'ERROR: GrADS executable',
+                                      'gadsdf:', 'ga-> [EOF]')):
             state = 'failed'
     except subprocess.TimeoutExpired:
         state = 'timeout'
