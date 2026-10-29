@@ -45,3 +45,7 @@ csh run_small_quickplot.csh $rundir/plan.json --workers 2 --resume
 ```
 
 Review plots and logs: upstream QuickPlot may return success despite rendering failures. If the installed plot drivers have changed, prepare a new plan.
+
+## Execution order and condensate hdiag
+
+The queue puts TOA radiation and the global radiation time series first, followed by horizontal cloud fraction, LWP and TQI plots. Mapped `hdiag_*` plots of liquid/ice condensate (such as QLTOT and QITOT) follow, with the remaining diagnostics afterward. Matching is based on the installed drivers and no plot IDs are assumed. If no matching `hdiag_*` command is exposed, preparation prints a warning and proceeds with the available diagnostics. Parallel workers may finish in a different order from the submission queue.
