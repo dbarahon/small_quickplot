@@ -117,7 +117,8 @@ def run_task(task, config):
                CMPEXP_ONLY='TRUE', CLIM='false', TAYLOR='false', STD_DEV='false',
                TBEG=config['begdate'], TEND=config['enddate'], SEASONS=config['season'],
                LONSENV='0 360', LATSENV='-90 90', CINTDIFF='ON',
-               PLOTS_DIR=str(Path(config['out']) / col), GRADSX=config['gradsx'])
+               PLOTS_DIR=str(Path(config['out']) / col), GRADSX=config['gradsx'],
+               DDFFILE='NULL', GRADS='grads')
     launcher = Path(__file__).with_name('run_grads.csh')
     cmd = ['tcsh', '-f', str(launcher), config['geosutil'], config['source'], config['history'], config['gradsx'], command]
     t0 = time.monotonic()
@@ -126,6 +127,11 @@ def run_task(task, config):
             result = subprocess.run(cmd, cwd=work, env=env, stdout=log, stderr=subprocess.STDOUT,
                                     timeout=config['timeout'])
         state = 'ok' if result.returncode == 0 else 'failed'
+        # GrADS frequently returns zero even after a script/interpreter error.
+        logtext = (work / 'run.log').read_text(errors='replace')
+        if any(x in logtext for x in ('Undefined variable.', 'Error opening', 'Syntax Error',
+                                      'Command not found.', 'ERROR: GrADS executable')):
+            state = 'failed'
     except subprocess.TimeoutExpired:
         state = 'timeout'
     logpath = work / 'run.log'
@@ -193,8 +199,16 @@ def main(argv=None):
     if not a.execute:
         print('Dry run. Add --execute inside a compute allocation.')
         return 0
+    # Smoke test one task before launching the entire collection. Avoid flooding
+    # the filesystem with repeated GEOS setup artifacts if initialization fails.
+    first = run_task(tasks[0], config) if tasks else None
+    results = [first] if first else []
+    if first and first['state'] != 'ok':
+        (out/'summary.json').write_text(json.dumps(results, indent=2))
+        print('STOP: first task failed; inspect ' + first['log'])
+        return 1
     with concurrent.futures.ThreadPoolExecutor(max_workers=a.workers) as pool:
-        results = list(pool.map(lambda task: run_task(task, config), tasks))
+        results.extend(pool.map(lambda task: run_task(task, config), tasks[1:]))
     (out/'summary.json').write_text(json.dumps(results, indent=2))
     failures = sum(x['state'] != 'ok' for x in results)
     print(f'{len(results) - failures}/{len(results)} commands exited zero; inspect plot files and logs.')
