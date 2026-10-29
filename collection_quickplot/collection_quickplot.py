@@ -16,7 +16,7 @@ SEASONS = 'JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC DJF MAM JJA SON ANN'.
 
 
 def parse_history(path):
-    """Extract collection fields respecting optional third (NetCDF alias) columns."""
+    """Extract collection fields with optional alias and reduction/operation."""
     text = '\n'.join(x.split('#', 1)[0] for x in path.read_text().splitlines())
     m = re.search(r'(?ms)^\s*COLLECTIONS:\s*(.*?)::', text)
     if not m:
@@ -35,15 +35,17 @@ def parse_history(path):
             parts = TOKEN.findall(raw)
             if not parts:
                 continue
-            if len(parts) not in (2, 3):
-                raise ValueError('Expected export, component[, alias] per line: ' + raw.strip())
+            if len(parts) not in (2, 3, 4):
+                raise ValueError('Expected export, component[, alias[, operation]] per line: ' + raw.strip())
             export, component = parts[:2]
-            alias = parts[2] if len(parts) == 3 else export
+            alias = parts[2] if len(parts) >= 3 else export
+            operation = parts[3] if len(parts) == 4 else None
             for var in export.split(';'):
                 if not IDENT.fullmatch(var) or not IDENT.fullmatch(component):
                     raise ValueError('Unsafe variable/component: ' + export + ':' + component)
                 fields.append({'export': var, 'component': component,
-                               'alias': alias if ';' not in alias else alias.split(';')[export.split(';').index(var)]})
+                               'alias': alias if ';' not in alias else alias.split(';')[export.split(';').index(var)],
+                               'operation': operation})
         result[name] = fields
     return result
 
