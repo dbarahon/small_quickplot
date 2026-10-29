@@ -174,7 +174,10 @@ def main():
         exports = mapped_exports(key[1])
         matched.update(x for x in a.variable if x.upper() in exports)
     if set(a.variable) - matched:
-        raise ValueError('Variables absent from installed mappings: ' + str(sorted(set(a.variable) - matched)))
+        missing = sorted(set(a.variable) - matched)
+        print('WARNING: no existing QuickPlot -EXPORT mapping for: ' + ', '.join(missing))
+        print('These variables were not added. Verify HISTORY.rc and use a custom plot driver if needed.')
+
     tasks = []
     audit = []
     output = run / 'plots'
