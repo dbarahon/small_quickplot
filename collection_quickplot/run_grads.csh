@@ -35,6 +35,7 @@ if ( "$gradsx" == "auto" ) then
     endif
     set gradsx = "$GRADS"
 endif
+echo "GEOS GrADS executable: $gradsx"
 which "$gradsx" >& /dev/null
 if ( $status != 0 ) then
     echo "ERROR: GrADS executable unavailable: $gradsx"
