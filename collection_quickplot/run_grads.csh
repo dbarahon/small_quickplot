@@ -27,6 +27,18 @@ if ( ! $?CMPEXP ) setenv CMPEXP NULL
 if ( "$CMPEXP" == "" ) setenv CMPEXP NULL
 if ( ! -f "$GEOSUTIL/plots/chckhist.new" ) exit 2
 /bin/cp "$GEOSUTIL/plots/chckhist.new" chckhist
-# Check GrADS' initialization and script dispatch in the log.
+# Use the executable configured by installed GEOS unless overridden.
+if ( "$gradsx" == "auto" ) then
+    if ( ! $?GRADS ) then
+        echo "ERROR: configure did not set GRADS"
+        exit 127
+    endif
+    set gradsx = "$GRADS"
+endif
+which "$gradsx" >& /dev/null
+if ( $status != 0 ) then
+    echo "ERROR: GrADS executable unavailable: $gradsx"
+    exit 127
+endif
 "$gradsx" -b -p -c "$command"
 exit $status
