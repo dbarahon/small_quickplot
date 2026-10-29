@@ -35,3 +35,7 @@ To compare with one or more other GEOS experiments, add repeatable `--compare /p
 - GEOS `configure` and `genplot` are invoked inside individual isolated working directories. The script does not alter the installed GEOS repository.
 
 Sources inspected: GEOS-ESM/GEOS_Util tag `v3.0.2` (`plots/quickplot`, `plots/portrait.script`, `plots/grads_util/genplot.gs`, `plots/grads_util/gencmp.gs`, and `plots/configure`).
+
+## GrADS executable and cleanup
+
+The default `--gradsx auto` uses `$GRADS` chosen by the installed `GEOSUTIL/plots/configure` script (usually `grads` on Discover); `gradsnc4` is no longer assumed. Use `--gradsx /full/path/to/executable` to override. After a successful subprocess exit, task logs are copied into `output/logs/COLLECTION/` and task work directories are deleted. Failed or timed-out tasks retain their working directories and `run.log` for debugging. Use `--keep-workdirs` to retain everything. Verify produced images: GrADS may exit successfully even when rendering fails.
