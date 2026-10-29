@@ -200,10 +200,18 @@ def main(argv=None):
     old_sdf = "'set sdfwrite -5d regrid.nc4'"
     if upstream.count(old_sdf) != 1:
         p.error('Unexpected upstream genplot.gs SDF block; refusing unsafe patch')
-    compatible = upstream.replace(old_sdf, "'set sdfwrite regrid.nc4'")
+    # GrADS defines qmod over seasonal time; even without -5d, the defined
+    # variable still carries a varying time coordinate and triggers gadsdf.
+    # This intermediate is only used as the regridding-grid reference (RGFILE),
+    # so write one fixed-time spatial slice, not the seasonal time series.
+    old_define = "'define qmodr = qmod'"
+    if upstream.count(old_define) != 1:
+        p.error('Unexpected upstream genplot.gs qmodr definition')
+    compatible = upstream.replace(old_define, "'define qmodr = qmod(t=1)'")
+    compatible = compatible.replace(old_sdf, "'set sdfwrite regrid.nc4'")
     compat_path = out / 'genplot_compat.gs'
     compat_path.write_text(compatible)
-    print('Compatibility: using local genplot_compat.gs (no forced time axis)')
+    print('Compatibility: local genplot uses a fixed-time spatial RGFILE snapshot')
     config = {'genplot_script': str(compat_path), 'out': str(out), 'source': str(source), 'history': str(rc),
               'geosutil': str(a.geosutil.resolve()), 'expid': expmatch.group(1),
               'season': a.season, 'begdate': a.begdate, 'enddate': a.enddate,
