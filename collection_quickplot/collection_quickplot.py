@@ -117,8 +117,7 @@ def run_task(task, config):
                CMPEXP_ONLY='TRUE', CLIM='false', TAYLOR='false', STD_DEV='false',
                TBEG=config['begdate'], TEND=config['enddate'], SEASONS=config['season'],
                LONSENV='0 360', LATSENV='-90 90', CINTDIFF='ON',
-               PLOTS_DIR=str(Path(config['out']) / col), GRADSX=config['gradsx'],
-               DDFFILE='NULL', GRADS='grads')
+               PLOTS_DIR=str(Path(config['out']) / col), GRADSX=config['gradsx'], DDFFILE='NULL')
     launcher = Path(__file__).with_name('run_grads.csh')
     cmd = ['tcsh', '-f', str(launcher), config['geosutil'], config['source'], config['history'], config['gradsx'], command]
     t0 = time.monotonic()
@@ -190,29 +189,8 @@ def main(argv=None):
     tasks = create_tasks(data, names, levels, a.zonal, a.compare)
     out = a.output.resolve()
     out.mkdir(parents=True, exist_ok=False)
-    # OpenGrADS 2.0.1 can fail exporting a seasonal mean with a forced time
-    # dimension: gadsdf: Time increment too large for 'minutes since'.
-    # Patch a private copy of the installed script, never the GEOS installation.
-    script = a.geosutil / 'plots/grads_util/genplot.gs'
-    if not script.is_file():
-        p.error('Missing upstream genplot.gs: ' + str(script))
-    upstream = script.read_text()
-    old_sdf = "'set sdfwrite -5d regrid.nc4'"
-    if upstream.count(old_sdf) != 1:
-        p.error('Unexpected upstream genplot.gs SDF block; refusing unsafe patch')
-    # GrADS defines qmod over seasonal time; even without -5d, the defined
-    # variable still carries a varying time coordinate and triggers gadsdf.
-    # This intermediate is only used as the regridding-grid reference (RGFILE),
-    # so write one fixed-time spatial slice, not the seasonal time series.
-    old_define = "'define qmodr = qmod'"
-    if upstream.count(old_define) != 1:
-        p.error('Unexpected upstream genplot.gs qmodr definition')
-    compatible = upstream.replace(old_define, "'define qmodr = qmod(t=1)'")
-    compatible = compatible.replace(old_sdf, "'set sdfwrite regrid.nc4'")
-    compat_path = out / 'genplot_compat.gs'
-    compat_path.write_text(compatible)
-    print('Compatibility: local genplot uses a fixed-time spatial RGFILE snapshot')
-    config = {'genplot_script': str(compat_path), 'out': str(out), 'source': str(source), 'history': str(rc),
+    # Use the unmodified GEOS plotting script and its configured GrADS runtime.
+    config = {'genplot_script': 'genplot', 'out': str(out), 'source': str(source), 'history': str(rc),
               'geosutil': str(a.geosutil.resolve()), 'expid': expmatch.group(1),
               'season': a.season, 'begdate': a.begdate, 'enddate': a.enddate,
               'compare': [str(x.resolve()) for x in a.compare], 'gradsx': a.gradsx,
