@@ -109,7 +109,7 @@ def run_task(task, config):
                LONSENV='0 360', LATSENV='-90 90', CINTDIFF='ON',
                PLOTS_DIR=str(Path(config['out']) / col), GRADSX=config['gradsx'])
     launcher = Path(__file__).with_name('run_grads.csh')
-    cmd = [str(launcher), config['geosutil'], config['source'], config['history'], config['gradsx'], command]
+    cmd = ['tcsh', '-f', str(launcher), config['geosutil'], config['source'], config['history'], config['gradsx'], command]
     t0 = time.monotonic()
     try:
         with (work / 'run.log').open('w') as log:
