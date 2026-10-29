@@ -24,7 +24,7 @@ Your current directory lists CERES_EBAF-TOA_Ed4.0, ERA5, GPCP, ISCCP, MAC-LWP an
 
 **Limitation:** GEOS QuickPlot can produce implicit reference comparisons inside a single mapped task. This utility cannot guarantee filtering *those internal comparisons* without inspecting/changing your installed QuickPlot scripts. It does not edit the shared reference catalogs or claim that unavailable references have been disabled internally.
 
-## Include variables from a collection
+## Include existing diagnostics by GEOS component
 
 ```csh
 csh prepare_small_quickplot.csh --source $expdir --season JJA \
@@ -32,7 +32,7 @@ csh prepare_small_quickplot.csh --source $expdir --season JJA \
     --collection GOCART --variable TOTEXTTAU:GOCART
 ```
 
-Repeat `--collection COLLECTION` to include all mapped `genplot` diagnostics exporting that collection; repeat `--variable VAR:COLLECTION` to select a specific mapped export. Additional diagnostics must exist in the installed portrait/landscape mappings. A missing requested variable is an error rather than an invented or invalid task ID. The default 31-diagnostic profile remains selected.
+In the current interface, `--collection` actually takes a GEOS **component** (such as `AGCM`, `DYN`, or `MOIST`), not an output collection such as `geosgcm_prog`. Likewise, `--variable VAR:COLLECTION` is really `VAR:COMPONENT`, for example `QLTOT:AGCM`. Repeat these options to select additional mapped diagnostics. Additional diagnostics must exist in the installed portrait/landscape mappings. A missing requested variable is an error rather than an invented or invalid task ID. The default 31-diagnostic profile remains selected.
 
 ## Batch jobs and results
 
