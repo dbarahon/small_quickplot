@@ -39,3 +39,7 @@ Sources inspected: GEOS-ESM/GEOS_Util tag `v3.0.2` (`plots/quickplot`, `plots/po
 ## GrADS executable and cleanup
 
 The default `--gradsx auto` uses `$GRADS` chosen by the installed `GEOSUTIL/plots/configure` script (usually `grads` on Discover); `gradsnc4` is no longer assumed. Use `--gradsx /full/path/to/executable` to override. After a successful subprocess exit, task logs are copied into `output/logs/COLLECTION/` and task work directories are deleted. Failed or timed-out tasks retain their working directories and `run.log` for debugging. Use `--keep-workdirs` to retain everything. Verify produced images: GrADS may exit successfully even when rendering fails.
+
+## Initialization failure troubleshooting
+
+The GEOS GrADS scripts expect `DDFFILE` to be defined even if no DDF is supplied. The launcher now exports `DDFFILE=NULL`, matching upstream QuickPlot's sentinel convention. GrADS may exit zero after a script error; the runner scans the log for common errors and validates **one task first** before queuing the rest. If this preflight fails, `summary.json` and that task's `run.log` remain, without creating another full set of task directories. Each task still initializes its own GEOS environment, so plotting a large collection can be slow and create many `.rcx`/temporary files. The next performance improvement would be sharing initialization among tasks within a worker, which is not implemented yet. Cancel a stalled old run using `scancel JOBID` before resubmitting.
