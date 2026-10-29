@@ -102,10 +102,13 @@ def task_command(task, expid, season, output, geosutil):
     if task['kind'] == 'zonal':
         script = Path(geosutil) / 'plots/zcmp/progz'
         return f'run {script} {var} {comp} {expid} {output} no_debug {season}'
-    script = Path(geosutil) / 'plots/hcmp/hcmp2'
-    # hcmp2 always requires a level; 1000 hPa is the legacy default for
-    # nominally 2D fields. Explicit --levels override this for level tasks.
     level = task['level'] if task['kind'] == 'level' else '1000'
+    # hcmp2 requires a matching verification/comparison variable. Without an
+    # explicit comparison use the model-only map driver instead.
+    if not task['compare']:
+        script = Path(__file__).with_name('model_map.gs')
+        return f'run {script} {var} {comp} {level} {expid} {output} {season}'
+    script = Path(geosutil) / 'plots/hcmp/hcmp2'
     return f'run {script} {var} {comp} {level} {expid} {output} no_debug {season}'
 
 
@@ -124,7 +127,8 @@ def run_task(task, config):
                PLOTS_DIR=str(Path(config['out']) / col), GRADSX=config['gradsx'], DDFFILE='NULL')
     launcher = Path(__file__).with_name('run_grads.csh')
     cmd = ['tcsh', '-f', str(launcher), config['geosutil'], config['source'], config['history'], config['gradsx'], command]
-    existing_graphics = {p.resolve() for p in (Path(config['out']) / col).glob('*.gif')}
+    existing_graphics = {p.resolve() for pattern in ('*.gif', '*.png')
+                         for p in (Path(config['out']) / col).glob(pattern)}
     t0 = time.monotonic()
     try:
         with (work / 'run.log').open('w') as log:
@@ -140,12 +144,13 @@ def run_task(task, config):
     except subprocess.TimeoutExpired:
         state = 'timeout'
     # GrADS can exit successfully without rendering a single graphic.
-    graphics = [str(p) for p in (Path(config['out']) / col).glob('*.gif')
-                if p.resolve() not in existing_graphics]
+    graphics = [str(p) for pattern in ('*.gif', '*.png')
+                for p in (Path(config['out']) / col).glob(pattern)
+                if p.resolve() not in existing_graphics and p.stat().st_size > 0]
     if state == 'ok' and not graphics:
         state = 'failed'
         with (work / 'run.log').open('a') as log:
-            log.write('\\nERROR: no GIF output detected in collection directory\\n')
+            log.write('\\nERROR: no new GIF/PNG output detected in collection directory\\n')
     logpath = work / 'run.log'
     if state == 'ok' and not config['keep_workdirs']:
         logs = Path(config['out']) / 'logs' / col
@@ -228,7 +233,7 @@ def main(argv=None):
         results.extend(pool.map(lambda task: run_task(task, config), tasks[1:]))
     (out/'summary.json').write_text(json.dumps(results, indent=2))
     failures = sum(x['state'] != 'ok' for x in results)
-    print(f'{len(results) - failures}/{len(results)} tasks produced new GIFs without detected errors.')
+    print(f'{len(results) - failures}/{len(results)} tasks produced new graphics without detected errors.')
     return 1 if failures else 0
 
 
