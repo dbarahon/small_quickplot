@@ -96,10 +96,10 @@ def create_tasks(data, names, levels, zonal, comparisons):
     return tasks
 
 
-def task_command(task, expid, season, output):
+def task_command(task, expid, season, output, genplot_script='genplot'):
     var, comp = task['variable'], task['component']
     if task['kind'] == 'map':
-        return f'run genplot -NAME {var} -EXPID {expid} -EXPORT {var}:{comp} -OUTPUT {output} -DEBUG no_debug -SEASON {season}'
+        return f'run {genplot_script} -NAME {var} -EXPID {expid} -EXPORT {var}:{comp} -OUTPUT {output} -DEBUG no_debug -SEASON {season}'
     if task['kind'] == 'level':
         return f'run gencmp -EXPID {expid} -EXPORT {var}:{comp} -LEVEL {task["level"]} -OUTPUT {output} -DEBUG no_debug -SEASON {season}'
     return f'run progz {var} {comp} {expid} {output} no_debug {season}'
@@ -110,7 +110,7 @@ def run_task(task, config):
     tag = f'{var}_{comp}_{task["kind"]}' + (f'_{task["level"]}' if task['level'] else '')
     work = Path(config['out']) / col / tag
     work.mkdir(parents=True, exist_ok=True)
-    command = task_command(task, config['expid'], config['season'], str(Path(config['out']) / col))
+    command = task_command(task, config['expid'], config['season'], str(Path(config['out']) / col), config['genplot_script'])
     env = os.environ.copy()
     env.update(GEOSUTIL=config['geosutil'], SOURCE=config['source'], HISTORYRC=config['history'],
                CMPEXP=' '.join(p + ':M' for p in config['compare']) + ' NULL',
@@ -190,7 +190,21 @@ def main(argv=None):
     tasks = create_tasks(data, names, levels, a.zonal, a.compare)
     out = a.output.resolve()
     out.mkdir(parents=True, exist_ok=False)
-    config = {'out': str(out), 'source': str(source), 'history': str(rc),
+    # OpenGrADS 2.0.1 can fail exporting a seasonal mean with a forced time
+    # dimension: gadsdf: Time increment too large for 'minutes since'.
+    # Patch a private copy of the installed script, never the GEOS installation.
+    script = a.geosutil / 'plots/grads_util/genplot.gs'
+    if not script.is_file():
+        p.error('Missing upstream genplot.gs: ' + str(script))
+    upstream = script.read_text()
+    old_sdf = "'set sdfwrite -5d regrid.nc4'"
+    if upstream.count(old_sdf) != 1:
+        p.error('Unexpected upstream genplot.gs SDF block; refusing unsafe patch')
+    compatible = upstream.replace(old_sdf, "'set sdfwrite regrid.nc4'")
+    compat_path = out / 'genplot_compat.gs'
+    compat_path.write_text(compatible)
+    print('Compatibility: using local genplot_compat.gs (no forced time axis)')
+    config = {'genplot_script': str(compat_path), 'out': str(out), 'source': str(source), 'history': str(rc),
               'geosutil': str(a.geosutil.resolve()), 'expid': expmatch.group(1),
               'season': a.season, 'begdate': a.begdate, 'enddate': a.enddate,
               'compare': [str(x.resolve()) for x in a.compare], 'gradsx': a.gradsx,
