@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -127,7 +128,15 @@ def run_task(task, config):
         state = 'ok' if result.returncode == 0 else 'failed'
     except subprocess.TimeoutExpired:
         state = 'timeout'
-    return dict(task=task, state=state, seconds=round(time.monotonic()-t0, 2), log=str(work/'run.log'))
+    logpath = work / 'run.log'
+    if state == 'ok' and not config['keep_workdirs']:
+        logs = Path(config['out']) / 'logs' / col
+        logs.mkdir(parents=True, exist_ok=True)
+        saved = logs / (tag + '.log')
+        shutil.copy2(logpath, saved)
+        shutil.rmtree(work)
+        logpath = saved
+    return dict(task=task, state=state, seconds=round(time.monotonic()-t0, 2), log=str(logpath))
 
 
 def main(argv=None):
@@ -146,8 +155,9 @@ def main(argv=None):
     p.add_argument('--zonal', action='store_true', help='Attempt zonal plots for selected fields')
     p.add_argument('--workers', type=int, default=8)
     p.add_argument('--timeout', type=int, default=1800)
-    p.add_argument('--gradsx', default='gradsnc4')
+    p.add_argument('--gradsx', default='auto', help='auto uses GEOS configure GRADS')
     p.add_argument('--execute', action='store_true', help='Run the plan rather than only writing it')
+    p.add_argument('--keep-workdirs', action='store_true', help='Retain all task working directories')
     a = p.parse_args(argv)
     if a.workers < 1 or a.timeout < 1:
         p.error('workers and timeout must be positive')
@@ -177,7 +187,7 @@ def main(argv=None):
               'geosutil': str(a.geosutil.resolve()), 'expid': expmatch.group(1),
               'season': a.season, 'begdate': a.begdate, 'enddate': a.enddate,
               'compare': [str(x.resolve()) for x in a.compare], 'gradsx': a.gradsx,
-              'timeout': a.timeout}
+              'timeout': a.timeout, 'keep_workdirs': a.keep_workdirs}
     (out/'plan.json').write_text(json.dumps({'config': config, 'collections': names, 'tasks': tasks}, indent=2))
     print(f'Planned {len(tasks)} plots for {len(names)} collections: {", ".join(names)}')
     if not a.execute:
