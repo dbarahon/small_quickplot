@@ -35,17 +35,13 @@ begdate = result
 enddate = result
 say 'Model-only 'EXPORT':'GC' at 'level' season='season
 say 'Dates: 'begdate' to 'enddate
-* Use seasonal's existing mean handling without NetCDF serialization.
-'seasonal 'qname'*'scale' mod'
-qseason = 'mod'season
-* seasonal defines modjja/modann/etc using lower-case suffixes.
-'lowercase 'qseason
-qseason = result
+* Average directly over requested dates; no intermediate NetCDF export.
+'define qmean = ave('qname'*'scale',t='begdate',t='enddate')'
 'set gxout shaded'
 'clear'
-'d 'qseason
+'d qmean'
 if (subwrd(result,1) = 'Syntax')
-  say 'ERROR: unable to display 'qseason
+  say 'ERROR: unable to display qmean'
   return
 endif
 'draw title 'expid' 'EXPORT':'GC' 'level' 'season
