@@ -113,3 +113,7 @@ availability depend on the installed GEOS_Util version.
 For failures, inspect the corresponding log named in `summary.json`.
 An all-undefined contour is a genuine data/level problem; the normal
 `ga-> [EOF]` at GrADS shutdown is not an error.
+
+## GrADS script-path troubleshooting
+
+The installed `plots/configure` sets `GASCRP` to `GEOSUTIL/plots/grads_util`. Do not replace it with a colon-separated search path: OpenGrADS 2.0.1 may then fail to locate `getvar`, `getenv`, `getresource`, `rgbset` and `setdates`, causing every task to fail before opening a dataset. The launchers preserve this setting. The local `geos_model_style.gs` is invoked using an absolute path via `COLLECTION_QUICKPLOT_DIR`.
