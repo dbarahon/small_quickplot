@@ -110,31 +110,7 @@ endif
 if (name = 'toacf')
   'define derived = f1 - f2 + f3 - f4'
 endif
-'run getenv "GEOSUTIL"'
-geosutil = result
-plotrc = geosutil'/plots/'name'/plot.rc'
-'getresource 'plotrc' CLEVS'
-clevs = result
-'getresource 'plotrc' CCOLS'
-ccols = result
-'getresource 'plotrc' TITLE'
-ptitle = result
-if (ptitle = 'NULL')
-  ptitle = name
-endif
-'clear'
-'set gxout shaded'
-'set parea 0.85 7.65 2.15 8.7'
-if (clevs != 'NULL')
-  'set clevs 'clevs
-endif
-if (ccols != 'NULL')
-  'set ccols 'ccols
-endif
-'d derived'
-'run cbarn'
-'draw title 'expid' 'ptitle' 'season' mean'
-filename = output'/'name'_'season'.png'
-'printim 'filename' white x1000 y850'
-say 'Finished Creating: 'filename
+'run getenv "COLLECTION_QUICKPLOT_DIR"'
+styledir = result
+'run 'styledir'/geos_model_style.gs derived 'name' DERIVED surface 'expid' 'season' derived 'output
 return
