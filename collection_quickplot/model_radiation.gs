@@ -114,6 +114,6 @@ endif
 'set vpage off'
 'draw title 'expid' TOA zonal mean radiation 'season' (W/m2)'
 filename = output'/TOA_radz_model_'season'.png'
-'printim 'filename' white x1100 y900
+'printim 'filename' white x1100 y900'
 say 'Finished Creating: 'filename
 return
