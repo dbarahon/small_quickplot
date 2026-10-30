@@ -107,7 +107,15 @@ def classify_fields(source, data, names):
     return dimensions
 
 
-def create_tasks(data, names, levels, zonal, comparisons, dimensions, include_2d=False):
+VERIFICATION_FIELDS = {
+    ('U', 'DYN'), ('V', 'DYN'), ('T', 'DYN'), ('ZLE', 'DYN'),
+    ('Q', 'MOIST'), ('RH2', 'MOIST'), ('SLP', 'DYN'),
+    ('QLTOT', 'AGCM'), ('QITOT', 'AGCM'),
+}
+
+
+def create_tasks(data, names, levels, zonal, comparisons, dimensions,
+                 include_2d=False, verification=True):
     priority = (['geosgcm_prog'] if 'geosgcm_prog' in data else []) + [
         name for name in data if name != 'geosgcm_prog']
     owner = {}
@@ -136,10 +144,15 @@ def create_tasks(data, names, levels, zonal, comparisons, dimensions, include_2d
                     tasks.append(dict(common, kind='level', level=lev))
                 if zonal:
                     tasks.append(dict(common, kind='zonal', level=None))
+                if verification and key in VERIFICATION_FIELDS:
+                    for lev in levels:
+                        tasks.append(dict(common, kind='verification', level=lev))
             elif kind == '2d' and include_2d:
                 tasks.append(dict(common, kind='map', level=None))
                 if zonal:
                     tasks.append(dict(common, kind='line', level=None))
+                if verification and key in VERIFICATION_FIELDS:
+                    tasks.append(dict(common, kind='verification', level='1000'))
             else:
                 skipped.append(dict(common, reason='2D excluded' if kind == '2d' else 'unknown/unsupported dimensions'))
     # GEOS radiation line diagnostic is a four-field plot, not an individual map.
@@ -173,7 +186,10 @@ def task_command(task, expid, season, output, geosutil):
             return f'run {script} {var} {comp} line {expid} {output} {season}'
         script = Path(geosutil) / 'plots/zcmp/progz'
         return f'run {script} {var} {comp} {expid} {output} no_debug {season}'
-    level = task['level'] if task['kind'] == 'level' else 'surface'
+    level = task['level'] if task['kind'] in ('level', 'verification') else 'surface'
+    if task['kind'] == 'verification':
+        script = Path(geosutil) / 'plots/hcmp/hcmp2'
+        return f'run {script} {var} {comp} {level} {expid} {output} no_debug {season}'
     # hcmp2 requires a matching verification/comparison variable. Without an
     # explicit comparison use the model-only map driver instead.
     if not task['compare']:
@@ -266,6 +282,7 @@ def main(argv=None):
     p.add_argument('--levels', default='850,500,250', help='Pressure levels for 3D fields (default: 850,500,250)')
     p.add_argument('--no-zonal', action='store_true', help='Disable zonal mean plots for 3D fields')
     p.add_argument('--exclude-2d', action='store_true', help='Skip 2D maps and latitude-profile lines (included by default)')
+    p.add_argument('--no-verification', action='store_true', help='Skip native GEOS hcmp2 verification panels for standard fields')
     p.add_argument('--workers', type=int, default=8)
     p.add_argument('--timeout', type=int, default=1800)
     p.add_argument('--gradsx', default='auto', help='auto uses GEOS configure GRADS')
@@ -298,7 +315,7 @@ def main(argv=None):
     except RuntimeError as exc:
         p.error(str(exc))
     tasks, skipped = create_tasks(data, names, levels, not a.no_zonal,
-                                  a.compare, dimensions, not a.exclude_2d)
+                                  a.compare, dimensions, not a.exclude_2d, not a.no_verification)
     for script_name in ('plots/hcmp/hcmp2', 'plots/zcmp/progz'):
         if not (a.geosutil / script_name).is_file():
             p.error('Required GEOS plotting script missing: ' + script_name)
