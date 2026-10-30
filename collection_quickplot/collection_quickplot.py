@@ -138,6 +138,8 @@ def create_tasks(data, names, levels, zonal, comparisons, dimensions, include_2d
                     tasks.append(dict(common, kind='zonal', level=None))
             elif kind == '2d' and include_2d:
                 tasks.append(dict(common, kind='map', level=None))
+                if zonal:
+                    tasks.append(dict(common, kind='line', level=None))
             else:
                 skipped.append(dict(common, reason='2D excluded' if kind == '2d' else 'unknown/unsupported dimensions'))
     return tasks, skipped
@@ -146,7 +148,14 @@ def create_tasks(data, names, levels, zonal, comparisons, dimensions, include_2d
 def task_command(task, expid, season, output, geosutil):
     """Use the legacy GEOS scripts that work with GEOS-configured OpenGrADS."""
     var, comp = task['variable'], task['component']
-    if task['kind'] == 'zonal':
+    if task['kind'] in ('zonal', 'line'):
+        if not task['compare']:
+            script = Path(__file__).with_name('model_zonal.gs')
+            mode = 'section' if task['kind'] == 'zonal' else 'line'
+            return f'run {script} {var} {comp} {mode} {expid} {output} {season}'
+        if task['kind'] == 'line':
+            script = Path(__file__).with_name('model_zonal.gs')
+            return f'run {script} {var} {comp} line {expid} {output} {season}'
         script = Path(geosutil) / 'plots/zcmp/progz'
         return f'run {script} {var} {comp} {expid} {output} no_debug {season}'
     level = task['level'] if task['kind'] == 'level' else 'surface'
@@ -199,13 +208,18 @@ def run_task(task, config):
         state = 'failed'
         with (work / 'run.log').open('a') as log:
             log.write('\nERROR: no GIF/PNG produced by task\n')
-    if state == 'ok':
+    # Preserve all graphics, including valid panels from a partially failed task.
+    # GEOS can produce several distinct plots before reporting an error.
+    if found:
         dest = Path(config['out']) / 'plots'
         dest.mkdir(exist_ok=True)
-        for idx, image in enumerate(found):
-            # Keep additional GEOS panels without overwriting any other task.
-            postfix = f'_{idx+1}' if len(found) > 1 else ''
-            target = dest / f'{tag}_{config["season"]}{postfix}{image.suffix.lower()}'
+        for image in found:
+            original = re.sub(r'[^A-Za-z0-9_.-]', '_', image.stem)
+            # GEOS's native basename often identifies verification datasets,
+            # sections, and comparison panels. Preserve that information.
+            target = dest / f'{tag}_{config["season"]}_{original}{image.suffix.lower()}'
+            if target.exists():
+                raise RuntimeError('Plot name collision: ' + str(target))
             shutil.move(str(image), str(target))
             graphics.append(str(target))
     logpath = work / 'run.log'
@@ -216,6 +230,8 @@ def run_task(task, config):
     logpath = saved
     if not config['keep_workdirs']:
         shutil.rmtree(work)
+    if state != 'ok' and graphics:
+        state = 'partial'
     return dict(task=task, state=state, graphics=graphics,
                 seconds=round(time.monotonic()-t0, 2), log=str(logpath))
 
@@ -234,7 +250,7 @@ def main(argv=None):
     p.add_argument('--output', type=Path, required=True)
     p.add_argument('--levels', default='850,500,250', help='Pressure levels for 3D fields (default: 850,500,250)')
     p.add_argument('--no-zonal', action='store_true', help='Disable zonal mean plots for 3D fields')
-    p.add_argument('--include-2d', action='store_true', help='Also plot horizontal 2D fields')
+    p.add_argument('--exclude-2d', action='store_true', help='Skip 2D fields (included by default)')
     p.add_argument('--workers', type=int, default=8)
     p.add_argument('--timeout', type=int, default=1800)
     p.add_argument('--gradsx', default='auto', help='auto uses GEOS configure GRADS')
@@ -267,7 +283,7 @@ def main(argv=None):
     except RuntimeError as exc:
         p.error(str(exc))
     tasks, skipped = create_tasks(data, names, levels, not a.no_zonal,
-                                  a.compare, dimensions, a.include_2d)
+                                  a.compare, dimensions, not a.exclude_2d)
     for script_name in ('plots/hcmp/hcmp2', 'plots/zcmp/progz'):
         if not (a.geosutil / script_name).is_file():
             p.error('Required GEOS plotting script missing: ' + script_name)
