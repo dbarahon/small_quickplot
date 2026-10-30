@@ -68,6 +68,6 @@ else
   'draw title 'expid' 'EXPORT':'GC' zonal mean latitude profile 'season
 endif
 filename = output'/'EXPORT'_'GC'_'mode'_'season'.png'
-'printim 'filename' white x1000 y850
+'printim 'filename' white x1000 y850'
 say 'Finished Creating: 'filename
 return
