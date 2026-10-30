@@ -44,8 +44,26 @@ if (tmin < 1 | tmax < tmin)
 endif
 say 'Computing zonal mean for 'EXPORT':'GC' 'mode' time 'tmin' to 'tmax
 
+* Follow the GEOS zcmp/progz facm unit conversions for standard fields.
+facm = 1
+if (EXPORT = 'Q')
+  facm = 1000
+endif
+if (EXPORT = 'RH2')
+  facm = 100
+endif
+if (EXPORT = 'OMEGA')
+  facm = 864
+endif
+if (EXPORT = 'W' | EXPORT = 'EPV' | EXPORT = 'O3')
+  facm = 1000
+endif
+if (EXPORT = 'DIVG' | EXPORT = 'VORT' | EXPORT = 'QLTOT' | EXPORT = 'QITOT')
+  facm = 1000000
+endif
+
 * First average time with longitude and latitude spanning the full grid.
-'define qtmean = ave('qname'*'scale',t='tmin',t='tmax')'
+'define qtmean = ave('qname'*'scale'*'facm',t='tmin',t='tmax')'
 'set t 'tmin
 * Longitude average. The -b flag uses bounds for zonal integration.
 'define qzonal = ave(qtmean,lon=0,lon=360,-b)'
