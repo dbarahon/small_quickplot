@@ -13,6 +13,11 @@ season = subwrd(args,6)
 'set display color white'
 'set grads off'
 'set mpdset hires'
+'set mproj scaled'
+'set frame on'
+'set xlopts 1 3 .11'
+'set ylopts 1 3 .11'
+'rgbset'
 'run getvar 'EXPORT' 'GC
 qname = subwrd(result,1)
 qfile = subwrd(result,2)
@@ -21,6 +26,37 @@ if (qfile = 'NULL')
   say 'ERROR: model export not found: 'EXPORT':'GC
   return
 endif
+* Use the same variable-specific resource settings as GEOS hcmp/hplt.
+'run getenv "GEOSUTIL"'
+geosutil = result
+plotrc = geosutil'/plots/grads_util/plot.rc'
+'getresource 'plotrc' 'EXPORT'_'GC'_'level'_FACTOR'
+if (result = 'NULL')
+  'getresource 'plotrc' 'EXPORT'_'GC'_FACTOR'
+endif
+fact = result
+if (fact = 'NULL')
+  fact = 1
+endif
+'getresource 'plotrc' 'EXPORT'_'GC'_'level'_CVALS'
+if (result = 'NULL')
+  'getresource 'plotrc' 'EXPORT'_'GC'_CVALS'
+endif
+cvals = result
+'getresource 'plotrc' 'EXPORT'_'GC'_'level'_CCOLS'
+if (result = 'NULL')
+  'getresource 'plotrc' 'EXPORT'_'GC'_CCOLS'
+endif
+ccols = result
+'getresource 'plotrc' 'EXPORT'_'GC'_'level'_TITLE'
+if (result = 'NULL')
+  'getresource 'plotrc' 'EXPORT'_'GC'_TITLE'
+endif
+ptitle = result
+if (ptitle = 'NULL')
+  ptitle = EXPORT':'GC
+endif
+
 'set dfile 'qfile
 if (level != 'surface')
   'set lev 'level
@@ -48,16 +84,23 @@ if (tmin < 1 | tmax < tmin)
 endif
 * Use numeric indices for the time dimension and select a fixed time
 * before drawing the time-averaged two-dimensional field.
-'define qmean = ave('qname'*'scale',t='tmin',t='tmax')'
+'define qmean = ave('qname'*'scale'*'fact',t='tmin',t='tmax')'
 'set t 'tmin
 'set gxout shaded'
 'clear'
+'set parea 0.85 7.65 2.15 8.7'
+if (cvals != 'NULL')
+  'set clevs 'cvals
+endif
+if (ccols != 'NULL')
+  'set ccols 'ccols
+endif
 'd qmean'
 if (subwrd(result,1) = 'Syntax')
   say 'ERROR: unable to display qmean'
   return
 endif
-'draw title 'expid'   'EXPORT':'GC'   'level'   'season' mean'
+'draw title 'expid'   'ptitle'   'level'   'season' mean'
 * The GEOS-installed cbarn script provides the conventional shaded color key.
 'run cbarn'
 filename = output'/'EXPORT'_'GC'_'level'_'season'.png'
