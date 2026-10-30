@@ -228,7 +228,8 @@ def run_task(task, config):
                                       'Command not found.', 'ERROR: GrADS executable',
                                       'gadsdf:', 'Request is completely outside file limits',
                                       'Cannot contour grid - all undefined values',
-                                      'SET Error:', 'DEFINE error:', 'Unable to locate ENDIF', 'ERROR:')):
+                                      'SET Error:', 'DEFINE error:', 'Unable to locate ENDIF',
+                                      'Non-terminated constant', 'Error occurred on line', 'ERROR:')):
             state = 'failed'
     except subprocess.TimeoutExpired:
         state = 'timeout'
