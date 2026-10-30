@@ -26,35 +26,22 @@ if (qfile = 'NULL')
   say 'ERROR: model export not found: 'EXPORT':'GC
   return
 endif
-* Use the same variable-specific resource settings as GEOS hcmp/hplt.
+* Only the unit-conversion factor is needed here; layout and colors are
+* applied by the shared renderer using GEOS's original plot.rc.
 'run getenv "GEOSUTIL"'
 geosutil = result
 plotrc = geosutil'/plots/grads_util/plot.rc'
-'getresource 'plotrc' 'EXPORT'_'GC'_'level'_FACTOR'
+if (level != 'surface')
+  'getresource 'plotrc' 'EXPORT'_'GC'_'level'_FACTOR'
+else
+  'getresource 'plotrc' 'EXPORT'_'GC'_FACTOR'
+endif
 if (result = 'NULL')
   'getresource 'plotrc' 'EXPORT'_'GC'_FACTOR'
 endif
 fact = result
 if (fact = 'NULL')
   fact = 1
-endif
-'getresource 'plotrc' 'EXPORT'_'GC'_'level'_CVALS'
-if (result = 'NULL')
-  'getresource 'plotrc' 'EXPORT'_'GC'_CVALS'
-endif
-cvals = result
-'getresource 'plotrc' 'EXPORT'_'GC'_'level'_CCOLS'
-if (result = 'NULL')
-  'getresource 'plotrc' 'EXPORT'_'GC'_CCOLS'
-endif
-ccols = result
-'getresource 'plotrc' 'EXPORT'_'GC'_'level'_TITLE'
-if (result = 'NULL')
-  'getresource 'plotrc' 'EXPORT'_'GC'_TITLE'
-endif
-ptitle = result
-if (ptitle = 'NULL')
-  ptitle = EXPORT':'GC
 endif
 
 'set dfile 'qfile
