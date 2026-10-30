@@ -370,7 +370,7 @@ def main(argv=None):
     tasks, skipped = create_tasks(data, names, levels, not a.no_zonal,
                                   a.compare, dimensions, not a.exclude_2d, not a.no_verification, a.lines)
     if not a.no_verification and not a.no_native:
-        native, native_skipped = discover_native_recipes(a.geosutil, source, data, names)
+        native, native_skipped = discover_native_recipes(a.geosutil, source, data, names, levels)
         if a.native_limit:
             native = native[:a.native_limit]
         print(f'Native GEOS verification recipes selected: {len(native)}')
