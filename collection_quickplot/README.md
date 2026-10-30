@@ -117,3 +117,14 @@ An all-undefined contour is a genuine data/level problem; the normal
 ## GrADS script-path troubleshooting
 
 The installed `plots/configure` sets `GASCRP` to `GEOSUTIL/plots/grads_util`. Do not replace it with a colon-separated search path: OpenGrADS 2.0.1 may then fail to locate `getvar`, `getenv`, `getresource`, `rgbset` and `setdates`, causing every task to fail before opening a dataset. The launchers preserve this setting. The local `geos_model_style.gs` is invoked using an absolute path via `COLLECTION_QUICKPLOT_DIR`.
+
+## Zonal figure presentation
+
+Model-only zonal sections now use a taller latitude-pressure panel, a
+horizontal colorbar and fine contour overlays, following the provided GEOS
+QuickPlot examples. CCN-prefixed number-concentration exports are displayed
+with a 10^-10 multiplier (title indicates x10^10) to avoid unhelpful 10^8
+colorbar values. This changes only displayed units, not the underlying data.
+Other variables continue to use GEOS `plot.rc` levels if available.
+The supplied QuickPlot CCN image was from a different experiment, so it is
+used as a style reference only, not a numerical validation.
