@@ -86,24 +86,8 @@ endif
 * before drawing the time-averaged two-dimensional field.
 'define qmean = ave('qname'*'scale'*'fact',t='tmin',t='tmax')'
 'set t 'tmin
-'set gxout shaded'
-'clear'
-'set parea 0.85 7.65 2.15 8.7'
-if (cvals != 'NULL')
-  'set clevs 'cvals
-endif
-if (ccols != 'NULL')
-  'set ccols 'ccols
-endif
-'d qmean'
-if (subwrd(result,1) = 'Syntax')
-  say 'ERROR: unable to display qmean'
-  return
-endif
-'draw title 'expid'   'ptitle'   'level'   'season' mean'
-* The GEOS-installed cbarn script provides the conventional shaded color key.
-'run cbarn'
-filename = output'/'EXPORT'_'GC'_'level'_'season'.png'
-'printim 'filename' white x1000 y850'
-say 'Finished Creating: 'filename
+* Plotting is delegated to the shared GEOS-style renderer.
+'run getenv "COLLECTION_QUICKPLOT_DIR"'
+styledir = result
+'run 'styledir'/geos_model_style.gs qmean 'EXPORT' 'GC' 'level' 'expid' 'season' map 'output
 return
