@@ -1,7 +1,7 @@
 # Collection QuickPlot
 
 Standalone GEOS collection plotting tool. No dependency on `small_quickplot`.
-Uses the installed GEOS_Util GrADS plotting scripts (genplot, gencmp, progz) and `plots/configure` to initialize their runtime environment. It reads **collections** (`geosgcm_prog`), **exports** (`QLTOT`), **components** (`AGCM`) and **NetCDF aliases** (`QL`) from `HISTORY.rc`.
+Uses the installed GEOS_Util GrADS plotting scripts (hcmp2, progz) and `plots/configure` to initialize their runtime environment. It reads **collections** (`geosgcm_prog`), **exports** (`QLTOT`), **components** (`AGCM`) and **NetCDF aliases** (`QL`) from `HISTORY.rc`.
 
 ## Discover use
 
@@ -24,15 +24,15 @@ The tool writes `plan.json` without running any GrADS processes. Supply `--execu
 
 To compare with one or more other GEOS experiments, add repeatable `--compare /path/to/other_experiment` options. The comparison format is the same `path:M` convention used by upstream QuickPlot; operational MERRA2/ERA5 datasets are *not* implicitly added. All output is organized under `output/COLLECTION/VARIABLE_COMPONENT_TYPE/`.
 
-`--collections` accepts a space-delimited list, e.g. `--collections geosgcm_prog geosgcm_moist`, comma-delimited values, or `--collections all` for all enabled collections. Only selected collections are dispatched. By default one horizontal `genplot` request per field is produced. Add `--levels 850,500,250` for additional level-specific `gencmp` requests and `--zonal` to attempt `progz` zonal plots. Avoid enabling these indiscriminately for purely surface fields. Worker count defaults to 8; override with `--workers N`.
+`--collections` accepts a space-delimited list, e.g. `--collections geosgcm_prog geosgcm_moist`, comma-delimited values, or `--collections all` for all enabled collections. Only selected collections are dispatched. By default one model-only PNG map at level 1000 is produced per field using `model_map.gs` (no verification requirement). Add `--levels 850,500,250` for additional level-specific `hcmp2` requests and `--zonal` to attempt `progz` zonal plots. Avoid enabling these indiscriminately for purely surface fields. Worker count defaults to 8; override with `--workers N`.
 
 ## Limitations
 
 - This is an initial site-testable implementation. **No Discover/GrADS end-to-end run has been performed.** GEOS `configure` may need additional environment initialization specific to your installation.
-- `HISTORY.rc` lists exports and aliases but does **not** reliably establish whether each field has a vertical dimension. The default plot uses `genplot` without `-LEVEL`; for 3D data this typically selects the first level. Specify `--levels` selectively; the current tool does not auto-classify levels.
+- `HISTORY.rc` lists exports and aliases but does **not** reliably establish whether each field has a vertical dimension. The default plot uses `hcmp2` with level 1000; this may not be available for all 3D data. Specify `--levels` selectively; the current tool does not auto-classify levels.
 - The installed `getvar` helper indexes exports by component, not output collection. If the same `VARIABLE:COMPONENT` is found in multiple enabled collections, the tool aborts rather than silently using the wrong one. Truly arbitrary collection-isolated plots require additional changes to the underlying `getvar` machinery or a NetCDF-based back end.
-- Some `genplot` behavior depends on collection-specific scale factors and preprocessing. Review logs and generated images. A zero exit code does not guarantee an image was produced.
-- GEOS `configure` and `genplot` are invoked inside individual isolated working directories. The script does not alter the installed GEOS repository.
+- Some `hcmp2` behavior depends on collection-specific scale factors and preprocessing. Review logs and generated images. A zero exit code does not guarantee an image was produced.
+- GEOS `configure` and the plotting scripts are invoked inside individual isolated working directories. The script does not alter the installed GEOS repository.
 
 Sources inspected: GEOS-ESM/GEOS_Util tag `v3.0.2` (`plots/quickplot`, `plots/portrait.script`, `plots/grads_util/genplot.gs`, `plots/grads_util/gencmp.gs`, and `plots/configure`).
 
@@ -44,6 +44,14 @@ The default `--gradsx auto` uses `$GRADS` chosen by the installed `GEOSUTIL/plot
 
 The GEOS GrADS scripts expect `DDFFILE` to be defined even if no DDF is supplied. The launcher now exports `DDFFILE=NULL`, matching upstream QuickPlot's sentinel convention. GrADS may exit zero after a script error; the runner scans the log for common errors and validates **one task first** before queuing the rest. If this preflight fails, `summary.json` and that task's `run.log` remain, without creating another full set of task directories. Each task still initializes its own GEOS environment, so plotting a large collection can be slow and create many `.rcx`/temporary files. The next performance improvement would be sharing initialization among tasks within a worker, which is not implemented yet. Cancel a stalled old run using `scancel JOBID` before resubmitting.
 
-## OpenGrADS 2.0.1 seasonal SDF compatibility
+## GEOS plotting dispatch (PR #4)
 
-The installed `genplot.gs` forces a five-dimensional intermediate `regrid.nc4` (`set sdfwrite -5d regrid.nc4`), which can fail with `gadsdf: Time increment too large for 'minutes since' time units attribute` on seasonal means. During planning, this package reads the installed `plots/grads_util/genplot.gs`, verifies that the expected statement occurs exactly once, and writes a **private copy** `genplot_compat.gs` under the run directory, using plain `set sdfwrite regrid.nc4` instead. Map tasks run the private script. The installed GEOS utilities are never changed. The normal dimensionality of the already-defined variable is retained, avoiding a forced artificial time coordinate. This is a compatibility experiment; if downstream plotting requires a fixed time/level dimension, inspect the single-task preflight log before launching more jobs. A changed upstream script causes the planner to fail rather than silently applying a mismatched patch.
+The package now invokes the installed `$GEOSUTIL/plots/hcmp/hcmp2` for map and pressure-level tasks, and `$GEOSUTIL/plots/zcmp/progz` for zonal tasks. Those are the legacy scripts used by GEOS `portrait.script`, including the previously successful U:DYN zonal diagnostic. The standard GEOS `g5_modules` and `configure` GrADS executable remain authoritative; no NetCDF writer patches or external GrADS module are used.
+
+`hcmp2` requires a level argument, so default maps pass `1000`; this does **not** establish that each variable is defined at 1000 hPa. Some fields and collection-only diagnostics will need field-aware level selection or plotting-resource definitions. `CMPEXP_ONLY` is FALSE because the upstream `hcmp2` returns early when TRUE and no comparison plots are requested. For runs with no explicit comparison experiment, whether installed GEOS verification resources produce graphics must still be established on Discover. A task is now considered successful only when new GIF output is detected, in addition to a clean GrADS log.
+
+This is committed but not yet tested end-to-end on Discover. Try a small collection or specific known field before a large run.
+
+## Model-only fallback
+
+When no `--compare` experiment is specified, horizontal and pressure-level requests use the local `model_map.gs` script. It obtains the field through GEOS `getvar`, averages directly over the requested dates with GrADS `ave`, and writes PNG output using `printim`. This avoids both `genplot`'s SDF writer and `hcmp2`'s requirement for matching verification resources. Zonal tasks continue using installed `progz`. With explicit comparison experiments, horizontal plots continue using `hcmp2` (which requires compatible verification/plot resources). The default model-only map is at 1000 hPa; use `--levels` for other pressure levels. The code detects GIF and PNG output, but this new path has not yet been validated on Discover.

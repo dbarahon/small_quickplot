@@ -13,7 +13,7 @@ if ( ! -f .quickplotrc ) exit 2
 source .quickplotrc
 if ( $status != 0 ) exit 2
 # Configure may set plotting environment; reassert per-task selections.
-setenv CMPEXP_ONLY TRUE
+setenv CMPEXP_ONLY FALSE
 setenv CLIM false
 setenv TAYLOR false
 setenv ANALYSIS false
@@ -35,6 +35,7 @@ if ( "$gradsx" == "auto" ) then
     endif
     set gradsx = "$GRADS"
 endif
+echo "GEOS GrADS executable: $gradsx"
 which "$gradsx" >& /dev/null
 if ( $status != 0 ) then
     echo "ERROR: GrADS executable unavailable: $gradsx"

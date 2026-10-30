@@ -96,13 +96,20 @@ def create_tasks(data, names, levels, zonal, comparisons):
     return tasks
 
 
-def task_command(task, expid, season, output, genplot_script='genplot'):
+def task_command(task, expid, season, output, geosutil):
+    """Use the legacy GEOS scripts that work with GEOS-configured OpenGrADS."""
     var, comp = task['variable'], task['component']
-    if task['kind'] == 'map':
-        return f'run {genplot_script} -NAME {var} -EXPID {expid} -EXPORT {var}:{comp} -OUTPUT {output} -DEBUG no_debug -SEASON {season}'
-    if task['kind'] == 'level':
-        return f'run gencmp -EXPID {expid} -EXPORT {var}:{comp} -LEVEL {task["level"]} -OUTPUT {output} -DEBUG no_debug -SEASON {season}'
-    return f'run progz {var} {comp} {expid} {output} no_debug {season}'
+    if task['kind'] == 'zonal':
+        script = Path(geosutil) / 'plots/zcmp/progz'
+        return f'run {script} {var} {comp} {expid} {output} no_debug {season}'
+    level = task['level'] if task['kind'] == 'level' else '1000'
+    # hcmp2 requires a matching verification/comparison variable. Without an
+    # explicit comparison use the model-only map driver instead.
+    if not task['compare']:
+        script = Path(__file__).with_name('model_map.gs')
+        return f'run {script} {var} {comp} {level} {expid} {output} {season}'
+    script = Path(geosutil) / 'plots/hcmp/hcmp2'
+    return f'run {script} {var} {comp} {level} {expid} {output} no_debug {season}'
 
 
 def run_task(task, config):
@@ -110,17 +117,18 @@ def run_task(task, config):
     tag = f'{var}_{comp}_{task["kind"]}' + (f'_{task["level"]}' if task['level'] else '')
     work = Path(config['out']) / col / tag
     work.mkdir(parents=True, exist_ok=True)
-    command = task_command(task, config['expid'], config['season'], str(Path(config['out']) / col), config['genplot_script'])
+    command = task_command(task, config['expid'], config['season'], str(Path(config['out']) / col), config['geosutil'])
     env = os.environ.copy()
     env.update(GEOSUTIL=config['geosutil'], SOURCE=config['source'], HISTORYRC=config['history'],
                CMPEXP=' '.join(p + ':M' for p in config['compare']) + ' NULL',
-               CMPEXP_ONLY='TRUE', CLIM='false', TAYLOR='false', STD_DEV='false',
+               CMPEXP_ONLY='FALSE', CLIM='false', TAYLOR='false', STD_DEV='false',
                TBEG=config['begdate'], TEND=config['enddate'], SEASONS=config['season'],
                LONSENV='0 360', LATSENV='-90 90', CINTDIFF='ON',
-               PLOTS_DIR=str(Path(config['out']) / col), GRADSX=config['gradsx'],
-               DDFFILE='NULL', GRADS='grads')
+               PLOTS_DIR=str(Path(config['out']) / col), GRADSX=config['gradsx'], DDFFILE='NULL')
     launcher = Path(__file__).with_name('run_grads.csh')
     cmd = ['tcsh', '-f', str(launcher), config['geosutil'], config['source'], config['history'], config['gradsx'], command]
+    existing_graphics = {p.resolve() for pattern in ('*.gif', '*.png')
+                         for p in (Path(config['out']) / col).glob(pattern)}
     t0 = time.monotonic()
     try:
         with (work / 'run.log').open('w') as log:
@@ -131,10 +139,20 @@ def run_task(task, config):
         logtext = (work / 'run.log').read_text(errors='replace')
         if any(x in logtext for x in ('Undefined variable.', 'Error opening', 'Syntax Error',
                                       'Command not found.', 'ERROR: GrADS executable',
-                                      'gadsdf:', 'ga-> [EOF]')):
+                                      'gadsdf:', 'Request is completely outside file limits',
+                                      'Cannot contour grid - all undefined values',
+                                      'SET Error:', 'DEFINE error:', 'ERROR:')):
             state = 'failed'
     except subprocess.TimeoutExpired:
         state = 'timeout'
+    # GrADS can exit successfully without rendering a single graphic.
+    graphics = [str(p) for pattern in ('*.gif', '*.png')
+                for p in (Path(config['out']) / col).glob(pattern)
+                if p.resolve() not in existing_graphics and p.stat().st_size > 0]
+    if state == 'ok' and not graphics:
+        state = 'failed'
+        with (work / 'run.log').open('a') as log:
+            log.write('\\nERROR: no new GIF/PNG output detected in collection directory\\n')
     logpath = work / 'run.log'
     if state == 'ok' and not config['keep_workdirs']:
         logs = Path(config['out']) / 'logs' / col
@@ -143,7 +161,8 @@ def run_task(task, config):
         shutil.copy2(logpath, saved)
         shutil.rmtree(work)
         logpath = saved
-    return dict(task=task, state=state, seconds=round(time.monotonic()-t0, 2), log=str(logpath))
+    return dict(task=task, state=state, graphics=graphics,
+                seconds=round(time.monotonic()-t0, 2), log=str(logpath))
 
 
 def main(argv=None):
@@ -188,31 +207,13 @@ def main(argv=None):
     if any(not re.fullmatch(r'[0-9]+(?:\.[0-9]+)?', x) for x in levels):
         p.error('Pressure levels must be positive numbers')
     tasks = create_tasks(data, names, levels, a.zonal, a.compare)
+    for script_name in ('plots/hcmp/hcmp2', 'plots/zcmp/progz'):
+        if not (a.geosutil / script_name).is_file():
+            p.error('Required GEOS plotting script missing: ' + script_name)
     out = a.output.resolve()
     out.mkdir(parents=True, exist_ok=False)
-    # OpenGrADS 2.0.1 can fail exporting a seasonal mean with a forced time
-    # dimension: gadsdf: Time increment too large for 'minutes since'.
-    # Patch a private copy of the installed script, never the GEOS installation.
-    script = a.geosutil / 'plots/grads_util/genplot.gs'
-    if not script.is_file():
-        p.error('Missing upstream genplot.gs: ' + str(script))
-    upstream = script.read_text()
-    old_sdf = "'set sdfwrite -5d regrid.nc4'"
-    if upstream.count(old_sdf) != 1:
-        p.error('Unexpected upstream genplot.gs SDF block; refusing unsafe patch')
-    # GrADS defines qmod over seasonal time; even without -5d, the defined
-    # variable still carries a varying time coordinate and triggers gadsdf.
-    # This intermediate is only used as the regridding-grid reference (RGFILE),
-    # so write one fixed-time spatial slice, not the seasonal time series.
-    old_define = "'define qmodr = qmod'"
-    if upstream.count(old_define) != 1:
-        p.error('Unexpected upstream genplot.gs qmodr definition')
-    compatible = upstream.replace(old_define, "'define qmodr = qmod(t=1)'")
-    compatible = compatible.replace(old_sdf, "'set sdfwrite regrid.nc4'")
-    compat_path = out / 'genplot_compat.gs'
-    compat_path.write_text(compatible)
-    print('Compatibility: local genplot uses a fixed-time spatial RGFILE snapshot')
-    config = {'genplot_script': str(compat_path), 'out': str(out), 'source': str(source), 'history': str(rc),
+    # Use the unmodified GEOS plotting scripts and configured GrADS runtime.
+    config = {'out': str(out), 'source': str(source), 'history': str(rc),
               'geosutil': str(a.geosutil.resolve()), 'expid': expmatch.group(1),
               'season': a.season, 'begdate': a.begdate, 'enddate': a.enddate,
               'compare': [str(x.resolve()) for x in a.compare], 'gradsx': a.gradsx,
@@ -234,7 +235,7 @@ def main(argv=None):
         results.extend(pool.map(lambda task: run_task(task, config), tasks[1:]))
     (out/'summary.json').write_text(json.dumps(results, indent=2))
     failures = sum(x['state'] != 'ok' for x in results)
-    print(f'{len(results) - failures}/{len(results)} commands exited zero; inspect plot files and logs.')
+    print(f'{len(results) - failures}/{len(results)} tasks produced new graphics without detected errors.')
     return 1 if failures else 0
 
 
