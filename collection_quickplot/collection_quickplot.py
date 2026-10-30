@@ -11,7 +11,8 @@ import subprocess
 import sys
 import time
 
-from native_recipes import discover as discover_native_recipes, prepare_legacy_genplot
+from native_recipes import (discover as discover_native_recipes, prepare_legacy_genplot,
+                            prepare_verification_selector, verification_catalog)
 
 try:
     from netCDF4 import Dataset
@@ -236,10 +237,11 @@ def run_task(task, config):
     work = Path(config['out']) / 'work' / tag
     images = work / 'images'
     images.mkdir(parents=True, exist_ok=True)
+    prepare_verification_selector(Path(config['geosutil']), work)
     command = task_command(task, config['expid'], config['season'], str(images), config['geosutil'])
     env = os.environ.copy()
     env.update(GEOSUTIL=config['geosutil'], SOURCE=config['source'], HISTORYRC=config['history'],
-               CMPEXP=' '.join(p + ':M' for p in config['compare']) + ' NULL',
+               CMPEXP=(' '.join(p + ':M' for p in config['compare']) + ' NULL').strip(),
                CMPEXP_ONLY='FALSE', CLIM='false', TAYLOR='false', STD_DEV='false',
                TBEG=config['begdate'], TEND=config['enddate'], SEASONS=config['season'],
                LONSENV='0 360', LATSENV='-90 90', CINTDIFF='ON',
@@ -380,7 +382,8 @@ def main(argv=None):
               'geosutil': str(a.geosutil.resolve()), 'expid': expmatch.group(1),
               'season': a.season, 'begdate': a.begdate, 'enddate': a.enddate,
               'compare': [str(x.resolve()) for x in a.compare], 'gradsx': a.gradsx,
-              'timeout': a.timeout, 'keep_workdirs': a.keep_workdirs}
+              'timeout': a.timeout, 'keep_workdirs': a.keep_workdirs,
+              'verification_rcs': verification_catalog(a.geosutil)}
     (out/'plan.json').write_text(json.dumps({'config': config, 'collections': names, 'tasks': tasks, 'skipped': skipped}, indent=2))
     print(f'Planned {len(tasks)} plots; skipped {len(skipped)} fields for {len(names)} collections: {", ".join(names)}')
     if not a.execute:
