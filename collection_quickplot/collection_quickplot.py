@@ -11,6 +11,11 @@ import subprocess
 import sys
 import time
 
+try:
+    from netCDF4 import Dataset
+except ImportError:
+    Dataset = None
+
 TOKEN = re.compile(r"'([^']*)'")
 IDENT = re.compile(r'^[A-Za-z][A-Za-z0-9_.-]*$')
 SEASONS = 'JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC DJF MAM JJA SON ANN'.split()
@@ -62,9 +67,47 @@ def choose(data, requested):
     return names
 
 
-def create_tasks(data, names, levels, zonal, comparisons):
-    # Resolve duplicates deterministically: prog first, then HISTORY.rc order.
-    # Record the preferred owner while keeping output under the requested collection.
+def classify_fields(source, data, names):
+    """Inspect a representative collection file; never infer vertical structure from HISTORY.rc."""
+    if Dataset is None:
+        raise RuntimeError('netCDF4 is required to classify 2D/3D fields')
+    dimensions = {}
+    for col in names:
+        folder = source / col
+        samples = sorted(p for suffix in ('*.nc4', '*.nc', '*.h5')
+                         for p in folder.glob(suffix) if p.is_file())
+        if not samples:
+            raise RuntimeError(f'No NetCDF samples found in {folder}; cannot classify fields')
+        unresolved = {(f['export'], f['component']): f['alias']
+                      for f in data[col]}
+        for file in samples[:8]:
+            if not unresolved:
+                break
+            try:
+                with Dataset(file) as nc:
+                    for key, alias in list(unresolved.items()):
+                        if alias not in nc.variables:
+                            continue
+                        dims = nc.variables[alias].dimensions
+                        # Time, lat, lon plus an optional vertical dimension.
+                        spatial = [d for d in dims if not any(
+                            marker in d.lower() for marker in ('time', 'lon', 'lat', 'xdim', 'ydim'))]
+                        ndim = len(dims)
+                        if ndim == 3:
+                            dimensions[(col, *key)] = '2d'
+                        elif ndim == 4:
+                            dimensions[(col, *key)] = '3d'
+                        else:
+                            dimensions[(col, *key)] = 'unsupported'
+                        del unresolved[key]
+            except OSError:
+                continue
+        for key in unresolved:
+            dimensions[(col, *key)] = 'unknown'
+    return dimensions
+
+
+def create_tasks(data, names, levels, zonal, comparisons, dimensions, include_2d=False):
     priority = (['geosgcm_prog'] if 'geosgcm_prog' in data else []) + [
         name for name in data if name != 'geosgcm_prog']
     owner = {}
@@ -73,27 +116,31 @@ def create_tasks(data, names, levels, zonal, comparisons):
             owner.setdefault((field['export'], field['component']), col)
     tasks = []
     seen = set()
+    skipped = []
     for col in names:
         for field in data[col]:
             key = (field['export'], field['component'])
             if key in seen:
                 continue
             seen.add(key)
-            var, comp = key
             actual = owner[key]
             if actual != col:
-                print(f'INFO: {var}:{comp} requested via {col}; '
+                print(f'INFO: {key[0]}:{key[1]} requested via {col}; '
                       f'GEOS getvar priority resolves to {actual}')
-            # Keep outputs grouped under requested collection; ownership is explicit.
+            kind = dimensions.get((actual, *key), dimensions.get((col, *key), 'unknown'))
             common = {'collection': col, 'resolved_collection': actual,
-                      'variable': var, 'component': comp,
-                      'compare': bool(comparisons)}
-            tasks.append(dict(common, kind='map', level=None))
-            for lev in levels:
-                tasks.append(dict(common, kind='level', level=lev))
-            if zonal:
-                tasks.append(dict(common, kind='zonal', level=None))
-    return tasks
+                      'variable': key[0], 'component': key[1],
+                      'compare': bool(comparisons), 'dimension': kind}
+            if kind == '3d':
+                for lev in levels:
+                    tasks.append(dict(common, kind='level', level=lev))
+                if zonal:
+                    tasks.append(dict(common, kind='zonal', level=None))
+            elif kind == '2d' and include_2d:
+                tasks.append(dict(common, kind='map', level=None))
+            else:
+                skipped.append(dict(common, reason='2D excluded' if kind == '2d' else 'unknown/unsupported dimensions'))
+    return tasks, skipped
 
 
 def task_command(task, expid, season, output, geosutil):
@@ -102,7 +149,7 @@ def task_command(task, expid, season, output, geosutil):
     if task['kind'] == 'zonal':
         script = Path(geosutil) / 'plots/zcmp/progz'
         return f'run {script} {var} {comp} {expid} {output} no_debug {season}'
-    level = task['level'] if task['kind'] == 'level' else '1000'
+    level = task['level'] if task['kind'] == 'level' else 'surface'
     # hcmp2 requires a matching verification/comparison variable. Without an
     # explicit comparison use the model-only map driver instead.
     if not task['compare']:
@@ -114,28 +161,28 @@ def task_command(task, expid, season, output, geosutil):
 
 def run_task(task, config):
     col, var, comp = task['collection'], task['variable'], task['component']
-    tag = f'{var}_{comp}_{task["kind"]}' + (f'_{task["level"]}' if task['level'] else '')
-    work = Path(config['out']) / col / tag
-    work.mkdir(parents=True, exist_ok=True)
-    command = task_command(task, config['expid'], config['season'], str(Path(config['out']) / col), config['geosutil'])
+    tag = f'{col}_{var}_{comp}_{task["kind"]}' + (f'_{task["level"]}' if task['level'] else '')
+    work = Path(config['out']) / 'work' / tag
+    images = work / 'images'
+    images.mkdir(parents=True, exist_ok=True)
+    command = task_command(task, config['expid'], config['season'], str(images), config['geosutil'])
     env = os.environ.copy()
     env.update(GEOSUTIL=config['geosutil'], SOURCE=config['source'], HISTORYRC=config['history'],
                CMPEXP=' '.join(p + ':M' for p in config['compare']) + ' NULL',
                CMPEXP_ONLY='FALSE', CLIM='false', TAYLOR='false', STD_DEV='false',
                TBEG=config['begdate'], TEND=config['enddate'], SEASONS=config['season'],
                LONSENV='0 360', LATSENV='-90 90', CINTDIFF='ON',
-               PLOTS_DIR=str(Path(config['out']) / col), GRADSX=config['gradsx'], DDFFILE='NULL')
+               PLOTS_DIR=str(images), GRADSX=config['gradsx'], DDFFILE='NULL')
     launcher = Path(__file__).with_name('run_grads.csh')
-    cmd = ['tcsh', '-f', str(launcher), config['geosutil'], config['source'], config['history'], config['gradsx'], command]
-    existing_graphics = {p.resolve() for pattern in ('*.gif', '*.png')
-                         for p in (Path(config['out']) / col).glob(pattern)}
+    cmd = ['tcsh', '-f', str(launcher), config['geosutil'], config['source'],
+           config['history'], config['gradsx'], command]
     t0 = time.monotonic()
+    state = 'ok'
     try:
         with (work / 'run.log').open('w') as log:
-            result = subprocess.run(cmd, cwd=work, env=env, stdout=log, stderr=subprocess.STDOUT,
-                                    timeout=config['timeout'])
+            result = subprocess.run(cmd, cwd=work, env=env, stdout=log,
+                                    stderr=subprocess.STDOUT, timeout=config['timeout'])
         state = 'ok' if result.returncode == 0 else 'failed'
-        # GrADS frequently returns zero even after a script/interpreter error.
         logtext = (work / 'run.log').read_text(errors='replace')
         if any(x in logtext for x in ('Undefined variable.', 'Error opening', 'Syntax Error',
                                       'Command not found.', 'ERROR: GrADS executable',
@@ -145,22 +192,30 @@ def run_task(task, config):
             state = 'failed'
     except subprocess.TimeoutExpired:
         state = 'timeout'
-    # GrADS can exit successfully without rendering a single graphic.
-    graphics = [str(p) for pattern in ('*.gif', '*.png')
-                for p in (Path(config['out']) / col).glob(pattern)
-                if p.resolve() not in existing_graphics and p.stat().st_size > 0]
-    if state == 'ok' and not graphics:
+    found = sorted(p for suffix in ('*.gif', '*.png')
+                   for p in images.rglob(suffix) if p.is_file() and p.stat().st_size > 0)
+    graphics = []
+    if state == 'ok' and not found:
         state = 'failed'
         with (work / 'run.log').open('a') as log:
-            log.write('\\nERROR: no new GIF/PNG output detected in collection directory\\n')
+            log.write('\\nERROR: no GIF/PNG produced by task\\n')
+    if state == 'ok':
+        dest = Path(config['out']) / 'plots'
+        dest.mkdir(exist_ok=True)
+        for idx, image in enumerate(found):
+            # Keep additional GEOS panels without overwriting any other task.
+            postfix = f'_{idx+1}' if len(found) > 1 else ''
+            target = dest / f'{tag}_{config["season"]}{postfix}{image.suffix.lower()}'
+            shutil.move(str(image), str(target))
+            graphics.append(str(target))
     logpath = work / 'run.log'
-    if state == 'ok' and not config['keep_workdirs']:
-        logs = Path(config['out']) / 'logs' / col
-        logs.mkdir(parents=True, exist_ok=True)
-        saved = logs / (tag + '.log')
-        shutil.copy2(logpath, saved)
+    logs = Path(config['out']) / 'logs'
+    logs.mkdir(exist_ok=True)
+    saved = logs / (tag + '.log')
+    shutil.copy2(logpath, saved)
+    logpath = saved
+    if not config['keep_workdirs']:
         shutil.rmtree(work)
-        logpath = saved
     return dict(task=task, state=state, graphics=graphics,
                 seconds=round(time.monotonic()-t0, 2), log=str(logpath))
 
@@ -177,8 +232,8 @@ def main(argv=None):
     p.add_argument('--enddate', required=True)
     p.add_argument('--geosutil', type=Path, default=os.environ.get('GEOSUTIL'))
     p.add_argument('--output', type=Path, required=True)
-    p.add_argument('--levels', default='', help='Pressure levels, comma-separated; explicit opt-in for 3D fields')
-    p.add_argument('--zonal', action='store_true', help='Attempt zonal plots for selected fields')
+    p.add_argument('--levels', default='850,500,250', help='Pressure levels for 3D fields (default: 850,500,250)')
+    p.add_argument('--no-zonal', action='store_true', help='Disable zonal mean plots for 3D fields')\n    p.add_argument('--include-2d', action='store_true', help='Also plot horizontal 2D fields')
     p.add_argument('--workers', type=int, default=8)
     p.add_argument('--timeout', type=int, default=1800)
     p.add_argument('--gradsx', default='auto', help='auto uses GEOS configure GRADS')
@@ -206,20 +261,20 @@ def main(argv=None):
     levels = [s.strip() for s in a.levels.split(',') if s.strip()]
     if any(not re.fullmatch(r'[0-9]+(?:\.[0-9]+)?', x) for x in levels):
         p.error('Pressure levels must be positive numbers')
-    tasks = create_tasks(data, names, levels, a.zonal, a.compare)
+    try:\n        dimensions = classify_fields(source, data, names)\n    except RuntimeError as exc:\n        p.error(str(exc))\n    tasks, skipped = create_tasks(data, names, levels, not a.no_zonal, a.compare, dimensions, a.include_2d)
     for script_name in ('plots/hcmp/hcmp2', 'plots/zcmp/progz'):
         if not (a.geosutil / script_name).is_file():
             p.error('Required GEOS plotting script missing: ' + script_name)
     out = a.output.resolve()
-    out.mkdir(parents=True, exist_ok=False)
+    out.mkdir(parents=True, exist_ok=False)\n    (out / 'plots').mkdir()\n    (out / 'logs').mkdir()
     # Use the unmodified GEOS plotting scripts and configured GrADS runtime.
     config = {'out': str(out), 'source': str(source), 'history': str(rc),
               'geosutil': str(a.geosutil.resolve()), 'expid': expmatch.group(1),
               'season': a.season, 'begdate': a.begdate, 'enddate': a.enddate,
               'compare': [str(x.resolve()) for x in a.compare], 'gradsx': a.gradsx,
               'timeout': a.timeout, 'keep_workdirs': a.keep_workdirs}
-    (out/'plan.json').write_text(json.dumps({'config': config, 'collections': names, 'tasks': tasks}, indent=2))
-    print(f'Planned {len(tasks)} plots for {len(names)} collections: {", ".join(names)}')
+    (out/'plan.json').write_text(json.dumps({'config': config, 'collections': names, 'tasks': tasks, 'skipped': skipped}, indent=2))
+    print(f'Planned {len(tasks)} plots; skipped {len(skipped)} fields for {len(names)} collections: {", ".join(names)}')
     if not a.execute:
         print('Dry run. Add --execute inside a compute allocation.')
         return 0
