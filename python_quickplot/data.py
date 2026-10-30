@@ -25,11 +25,21 @@ def history(path):
                 continue
             exports = p[0].split(';')
             aliases = p[2].split(';') if len(p)>2 else exports
-            if len(aliases)!=len(exports):
+            # A single bundle export may expand to several on-disk fields.
+            # Use each alias as its diagnostic identity so task deduplication
+            # and caching cannot collapse all members onto the first field.
+            source_export = None
+            if len(exports) == 1 and len(aliases) > 1:
+                source_export = exports[0]
+                exports = aliases
+            elif len(aliases)!=len(exports):
                 raise ValueError('Ambiguous aliases: '+line)
-            result[col].extend(dict(export=v, component=p[1], alias=a,
-                                    operation=p[3] if len(p)>3 else None)
-                               for v,a in zip(exports,aliases))
+            for v, a in zip(exports, aliases):
+                field = dict(export=v, component=p[1], alias=a,
+                             operation=p[3] if len(p)>3 else None)
+                if source_export is not None:
+                    field['source_export'] = source_export
+                result[col].append(field)
     return result
 
 
