@@ -1,0 +1,12 @@
+{
+  "file_patterns": {
+    "geosgcm_surf": "geosgcm_surf/**/*.nc4",
+    "geosgcm_prog": "geosgcm_prog/**/*.nc4"
+  },
+  "verification": {
+    "MERRA-2": {
+      "T:DYN": {"path": "/path/to/monthly/merra2.*.nc4", "variable": "T", "scale": 1, "units": "K"},
+      "U:DYN": {"path": "/path/to/monthly/merra2.*.nc4", "variable": "U", "scale": 1, "units": "m s-1"}
+    }
+  }
+}

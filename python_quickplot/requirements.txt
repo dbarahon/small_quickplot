@@ -1,0 +1,7 @@
+numpy>=1.23
+xarray>=2023.12
+netCDF4>=1.6
+scipy>=1.10
+matplotlib>=3.7
+pandas>=1.5
+# Optional offline coastline rendering: cartopy>=0.22
