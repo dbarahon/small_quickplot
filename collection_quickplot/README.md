@@ -54,12 +54,23 @@ The output directory must not yet exist. When running interactively, supply
 
 ## Scientific diagnostics and plotting style
 
-Ordinary model-only horizontal maps are rendered with `model_map.gs`.
-They read the native GEOS
-`plots/grads_util/plot.rc` settings (including the available variable
-title, units/scaling, contour levels and color palette) instead of assigning
-generic shading. Comparisons for supported atmospheric state variables use
-the installed `hcmp2` routines.
+Model-only maps, zonal sections and derived maps now use a single
+`geos_model_style.gs` rendering component. It follows the GEOS
+`hcmp/hplt` and `zcmp/zplt` single-panel presentation conventions:
+portrait viewport, plotting area, axes, borders, `rgbset` color definitions,
+GEOS resource-controlled contours/colors, colorbar and annotated titles.
+Model-only maps use `grads_util/plot.rc`; 3D zonal sections first use
+the corresponding `_Z_CLEVS` and `_Z_CCOLS` resources. Derived maps
+use `plots/NAME/plot.rc`. `model_map.gs` still handles unit conversion
+and time averaging, and `model_zonal.gs` handles longitude averaging.
+The same shared renderer is called from `model_derived.gs`.
+
+This reuses the graphical conventions and resource lookup logic, not the
+native three-panel model/verification/difference page: that layout requires
+comparison data. Exact pixel-equivalence is **not** claimed, because
+`hplt` also contains special dynamic contour rules for individual
+meteorological fields. Native verification/comparison figures still use
+their installed GEOS routines unchanged.
 
 The model-only derived maps reproduce the original QuickPlot
 `modform.gs` formulas:
