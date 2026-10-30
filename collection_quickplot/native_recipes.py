@@ -10,9 +10,10 @@ PLOT_ID = re.compile(r"\bPORTRAIT\.([0-9]+)\b")
 EXPORT_SECTION = re.compile(r"-EXPORT\s+(.+?)(?=\s+-[A-Za-z][A-Za-z_-]*\b|[\"']|$)")
 FIELD = re.compile(r"\b([A-Za-z][A-Za-z0-9_]*)\:([A-Za-z][A-Za-z0-9_]*)\b")
 NAME = re.compile(r"-NAME\s+([A-Za-z][A-Za-z0-9_.-]*)")
+LEVEL = re.compile(r"-LEVEL\s+([0-9]+(?:\.[0-9]+)?)")
 
 
-def discover(geosutil, source, data, names):
+def discover(geosutil, source, data, names, levels):
     """Return native genplot recipes supported by the requested collections.
 
     All installed GEOS verification resource mappings remain authoritative.
@@ -54,6 +55,9 @@ def discover(geosutil, source, data, names):
             continue
         pid = "PORTRAIT." + number.group(1)
         if pid in seen:
+            continue
+        native_level = LEVEL.search(line)
+        if native_level and native_level.group(1) not in levels:
             continue
         seen.add(pid)
         title = NAME.search(line)
