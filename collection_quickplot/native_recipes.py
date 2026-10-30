@@ -1,144 +1,69 @@
-"""Discover native GEOS QuickPlot verification recipes from portrait.script.
+"""Discover GEOS QuickPlot recipes without executing portrait.script.
 
-The installed portrait.script is the authority on recipe definitions and plot
-IDs. It documents "-v -list" as the supported way to enumerate those IDs.
+Read the installed portrait definitions directly. Running portrait.script
+-list can be expensive (and timed out on Discover in October 2026).
 """
 import re
-import subprocess
+from pathlib import Path
 
-PLOT_ID = re.compile(r"\bPORTRAIT\.([0-9]+)\b")
-EXPORT_SECTION = re.compile(r"-EXPORT\s+(.+?)(?=\s+-[A-Za-z][A-Za-z_-]*\b|[\"']|$)")
-FIELD = re.compile(r"\b([A-Za-z][A-Za-z0-9_]*)\:([A-Za-z][A-Za-z0-9_]*)\b")
-NAME = re.compile(r"-NAME\s+([A-Za-z][A-Za-z0-9_.-]*)")
-LEVEL = re.compile(r"-LEVEL\s+([0-9]+(?:\.[0-9]+)?)")
+GENPLOT = re.compile(r'run\s+genplot\s+-EXPORT\s+(.+?)\s+-NAME\s+(\S+)', re.I)
+FIELD = re.compile(r'\b([A-Za-z][A-Za-z0-9_]*)\:([A-Za-z][A-Za-z0-9_]*)\b')
 
-
-def discover(geosutil, source, data, names, levels):
-    """Return native genplot recipes supported by the requested collections.
-
-    All installed GEOS verification resource mappings remain authoritative.
-    No verification files are fabricated or replaced.
-    """
-    script = geosutil / "plots/portrait.script"
-    if not script.is_file():
-        return [], [{"reason": "GEOS portrait.script unavailable"}]
-    try:
-        result = subprocess.run(
-            ["tcsh", "-f", str(script), "-v", "-list", "-source", str(source)],
-            capture_output=True, text=True, timeout=90, check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        return [], [{"reason": "QuickPlot recipe enumeration failed: " + str(exc)}]
-    if result.returncode != 0:
-        return [], [{"reason": "QuickPlot recipe listing failed: " +
-                     (result.stderr[-500:] or str(result.returncode))}]
-    selected = {(f["export"], f["component"]) for col in names for f in data[col]}
-    available = {(f["export"], f["component"]) for fields in data.values() for f in fields}
-    recipes = []
-    skipped = []
-    seen = set()
-    native_special = {
-        '/plots/precip/precip ': [('CN_PRCP','MOIST'),('LS_PRCP','MOIST'),('AN_PRCP','MOIST'),('TPREC','MOIST')],
-        '/plots/olr/olr ': [('OLR','IRRAD'),('OLC','IRRAD'),('RSR','SOLAR'),('RSC','SOLAR')],
-        '/plots/olr/olrcc5 ': [('OLR','IRRAD'),('OLCC5','IRRAD'),('RSR','SOLAR'),('RSC','SOLAR')],
-    }
-    for line in (result.stdout + "\n" + result.stderr).splitlines():
-        matched_special = next((key for key in native_special if key in line), None)
-        if not matched_special and ("run genplot" not in line or "-EXPORT" not in line):
-            continue
-        number = PLOT_ID.search(line)
-        fields = EXPORT_SECTION.search(line)
-        if not number or (not fields and not matched_special):
-            continue
-        sources = native_special[matched_special] if matched_special else [tuple(x) for x in FIELD.findall(fields.group(1))]
-        if not sources or not any(x in selected for x in sources):
-            continue
-        pid = "PORTRAIT." + number.group(1)
-        if pid in seen:
-            continue
-        native_level = LEVEL.search(line)
-        if native_level and native_level.group(1) not in levels:
-            continue
-        seen.add(pid)
-        title = NAME.search(line)
-        name = (matched_special.rsplit('/',1)[-1].strip() if matched_special
-                else title.group(1) if title else 'plot' + number.group(1))
-        missing = [a + ":" + b for a, b in sources if (a, b) not in available]
-        common = {"collection": names[0] if len(names) == 1 else "diagnostics",
-                  "resolved_collection": "native", "variable": name,
-                  "component": "QUICKPLOT", "kind": "native",
-                  "plot_id": pid, "level": None, "dimension": "derived",
-                  "compare": True, "exports": [a + ":" + b for a, b in sources]}
-        if missing:
-            skipped.append(dict(common, reason="missing " + ", ".join(missing)))
-        else:
-            recipes.append(common)
-    if not recipes:
-        skipped.append({"reason": "No matching native verification recipes found in portrait listing",
-                        "diagnostic": "returncode=%s; stdout_tail=%s; stderr_tail=%s" %
-                        (result.returncode, result.stdout[-1200:], result.stderr[-1200:])})
-    return recipes, skipped
-
-
-def prepare_legacy_genplot(geosutil, work):
-    """Avoid OpenGrADS 2.0.1 monthly-time sdfwrite for native genplot recipes.
-
-    GEOS makplotz uses the temporary RGFILE only as the model grid reference.
-    Use the already-open model file rather than rewriting the time axis.
-    This local adaptation is experimental and never modifies GEOSUTIL.
-    """
-    source = geosutil / "plots/grads_util/genplot.gs"
-    text = source.read_text()
-    start = text.find("  'define qmodr = qmod'")
-    end = text.find("              rgfile = result", start)
-    if start < 0 or end < 0:
-        raise RuntimeError("Unrecognized installed genplot.gs; refusing compatibility patch")
-    end += len("              rgfile = result")
-    text = text[:start] + "  rgfile = qfile.1\n" + text[end:]
-    (work / "genplot.gs").write_text(text)
 
 def verification_catalog(geosutil):
-    """Return exactly the installed GEOS VERIFICATION_RCS catalog entries."""
-    folder = geosutil / "plots/VERIFICATION_RCS"
+    folder = Path(geosutil) / "plots/VERIFICATION_RCS"
     return sorted(p.name for p in folder.glob("VERIFICATION.*.rc") if p.is_file())
 
 
-def prepare_verification_selector(geosutil, work):
-    """Constrain getnumrc discovery to the installed VERIFICATION_RCS catalog.
+def discover(geosutil, source, data, names, levels):
+    """Select direct native genplot recipes based on source export dependencies.
 
-    MERRA-2/ERA5 operational comparisons are independent CMPEXP datasets.
-    If a GEOS installation lacks the catalog, preserve its native behavior.
+    The native recipe definition, variable name and product naming remain
+    authoritative; do not infer new variable-to-observation mappings.
     """
-    allowed = verification_catalog(geosutil)
-    if not allowed:
-        return
-    import shlex
-    shell = [
-        "#!/bin/sh",
-        "dir=$1",
-        ": > rcfiles.selected",
-        'for rc in "$dir"/VERIFICATION*.rc; do',
-        '  [ -f "$rc" ] || continue',
-        '  case "${rc##*/}" in',
-        "    " + "|".join(shlex.quote(n) for n in allowed) + ")",
-        '       printf "%s\\n" "$rc" >> rcfiles.selected ;;',
-        "  esac",
-        "done",
-        "wc -l < rcfiles.selected > rcfiles",
-        "cat rcfiles.selected >> rcfiles",
-    ]
-    (work / "filter_verification.sh").write_text("\n".join(shell) + "\n")
-    (work / "getnumrc.gs").write_text(
-        "function getnumrc(args)\n"
-        "dir = subwrd(args,1)\n"
-        "'!/bin/sh ./filter_verification.sh 'dir\n"
-        "numrc = sublin(read('rcfiles'),2)\n"
-        "resultstr = numrc\n"
-        "k = 1\n"
-        "while (k <= numrc)\n"
-        "  file = sublin(read('rcfiles'),2)\n"
-        "  resultstr = resultstr' 'file\n"
-        "  k = k + 1\n"
-        "endwhile\n"
-        "return resultstr\n"
-    )
+    portrait = Path(geosutil) / "plots/portrait.script"
+    if not portrait.is_file():
+        return [], [{"reason": "GEOS portrait.script unavailable"}]
+    try:
+        source_text = portrait.read_text(errors="replace")
+    except OSError as exc:
+        return [], [{"reason": "Unable to read portrait.script: " + str(exc)}]
+
+    selected = {(f["export"], f["component"]) for col in names for f in data[col]}
+    available = {(f["export"], f["component"]) for fields in data.values() for f in fields}
+    tasks, skipped, seen = [], [], set()
+    for line in source_text.splitlines():
+        stripped = line.lstrip()
+        if stripped.startswith("#"):
+            continue
+        match = GENPLOT.search(line)
+        if not match:
+            continue
+        sources = FIELD.findall(match.group(1))
+        name = match.group(2).strip()
+        if not sources or not any(src in selected for src in sources):
+            continue
+        key = (name, tuple(sources))
+        if key in seen:
+            continue
+        seen.add(key)
+        missing = [f"{v}:{gc}" for v, gc in sources if (v, gc) not in available]
+        task = {"collection": names[0] if len(names) == 1 else "diagnostics",
+                "resolved_collection": "native", "variable": name,
+                "component": "QUICKPLOT", "kind": "native",
+                "plot_id": name, "level": None, "dimension": "derived",
+                "compare": True, "exports": [f"{v}:{gc}" for v, gc in sources]}
+        if missing:
+            skipped.append(dict(task, reason="missing exports: " + ", ".join(missing)))
+        else:
+            tasks.append(task)
+
+    if not tasks:
+        skipped.append({"reason": "No eligible genplot recipes for selected collection",
+                        "selected_exports": len(selected), "matching_recipes": len(seen)})
+    return tasks, skipped
+
+
+def prepare_legacy_genplot(geosutil, work):
+    """Compatibility hook retained for historical callers (no mutation)."""
+    return None
