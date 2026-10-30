@@ -12,7 +12,7 @@ import sys
 import time
 
 from native_recipes import (discover as discover_native_recipes, prepare_legacy_genplot,
-                            prepare_verification_selector, verification_catalog)
+                            verification_catalog)
 
 try:
     from netCDF4 import Dataset
@@ -237,7 +237,6 @@ def run_task(task, config):
     work = Path(config['out']) / 'work' / tag
     images = work / 'images'
     images.mkdir(parents=True, exist_ok=True)
-    prepare_verification_selector(Path(config['geosutil']), work)
     command = task_command(task, config['expid'], config['season'], str(images), config['geosutil'])
     env = os.environ.copy()
     env.update(GEOSUTIL=config['geosutil'], SOURCE=config['source'], HISTORYRC=config['history'],
@@ -277,7 +276,9 @@ def run_task(task, config):
                                       'gadsdf:', 'Request is completely outside file limits',
                                       'Cannot contour grid - all undefined values',
                                       'SET Error:', 'DEFINE error:', 'Unable to locate ENDIF',
-                                      'Non-terminated constant', 'Error occurred on line', 'ERROR:')):
+                                      'Non-terminated constant', 'Error occurred on line',
+                                      'Error opening script file:', 'Unknown command:',
+                                      'No files open yet', 'ERROR:')):
             state = 'failed'
     except subprocess.TimeoutExpired:
         state = 'timeout'
