@@ -78,6 +78,21 @@ endif
 if (title = 'NULL')
   title = export':'gc
 endif
+* Many collection-specific exports are not in the GEOS plot.rc catalog.
+* Use a physically meaningful display multiplier for CCN number fields.
+displayfield = field
+multiplier = ''
+if (mode = 'section' & substr(export,1,3) = 'CCN')
+  'define ccn_display = 'field'*1e-10'
+  displayfield = 'ccn_display'
+  multiplier = '(x10**10)'
+  if (clevs = 'NULL')
+    clevs = '0.0025 0.005 0.0075 0.01 0.0125 0.015 0.0175 0.02 0.0225 0.025 0.0275 0.03 0.035 0.04 0.05'
+  endif
+  if (ccols = 'NULL')
+    ccols = '0 49 47 45 44 36 34 32 31 21 22 23 24 25 26 27'
+  endif
+endif
 if (cbscale = 'NULL')
   cbscale = 0.8
 endif
@@ -99,7 +114,12 @@ endif
 'set rgb 84 204 204 204'
 'set rgb 85 137 137 137'
 'set vpage 0 8.5 0 11'
-'set parea 1.5 7.0 4.2 7.0'
+if (mode = 'section')
+  'set parea 1.05 7.5 1.55 9.85'
+  'set grid on'
+else
+  'set parea 1.15 7.35 2.9 8.85'
+endif
 if (mode = 'section')
   'set mproj off'
   'set zlog off'
@@ -115,7 +135,7 @@ if (ccols != 'NULL')
   'set ccols 'ccols
 endif
 'set clab 'clab
-'d 'field
+'d 'displayfield
 if (clevs != 'NULL')
   'set gxout contour'
   'set ccolor 1'
@@ -134,17 +154,17 @@ endif
 if (mode = 'section')
   'draw ylab Pressure (hPa)'
   'set parea off'
-  'cbarn -vert -snum 'cbscale' -ymid 5.6'
+  'cbarn -snum 0.65 -xmid 4.25 -ymid 0.98'
 else
   'set parea off'
-  'cbarn -snum 'cbscale' -xmid 4.25 -ymid 3.65'
+  'cbarn -snum 'cbscale' -xmid 4.25 -ymid 2.15'
 endif
 
 'set vpage off'
 'set string 1 c 6'
 'set strsiz .13'
 if (mode = 'section')
-  'draw string 4.25 10.75 Zonal Mean: 'title
+  'draw string 4.25 10.68 'export':'gc'  'title'  'season'  'multiplier
 else
   if (level = 'surface' | mode = 'derived')
     'draw string 4.25 10.75 'title
@@ -153,7 +173,7 @@ else
   endif
 endif
 'set strsiz .10'
-'draw string 4.25 10.48 'expid'  'season'  (Model Only)'
+'draw string 4.25 10.42 EXPID: 'expid'  'season'  (Model Only)'
 'set string 1 l 4'
 'set strsiz .075'
 'draw string 0.25 0.23 EXPID: 'expid'  FIELD: 'export':'gc'  SEASON: 'season
