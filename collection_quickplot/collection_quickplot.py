@@ -250,7 +250,7 @@ def run_task(task, config):
             prepare_legacy_genplot(Path(config['geosutil']), work)
         except (OSError, RuntimeError) as exc:
             logpath = Path(config['out']) / 'logs' / (tag + '.log')
-            logpath.write_text('ERROR: Native QuickPlot compatibility preparation: ' + str(exc) + '\\n')
+            logpath.write_text('ERROR: Native QuickPlot compatibility preparation: ' + str(exc) + '\n')
             if not config['keep_workdirs']:
                 shutil.rmtree(work)
             return dict(task=task, state='failed', graphics=[], seconds=0.0, log=str(logpath))
@@ -364,6 +364,10 @@ def main(argv=None):
         p.error(str(exc))
     tasks, skipped = create_tasks(data, names, levels, not a.no_zonal,
                                   a.compare, dimensions, not a.exclude_2d, not a.no_verification, a.lines)
+    if not a.no_verification and not a.no_native:
+        native, native_skipped = discover_native_recipes(a.geosutil, source, data, names)
+        tasks.extend(native)
+        skipped.extend(native_skipped)
     for script_name in ('plots/hcmp/hcmp2', 'plots/zcmp/progz'):
         if not (a.geosutil / script_name).is_file():
             p.error('Required GEOS plotting script missing: ' + script_name)
