@@ -245,7 +245,8 @@ def run_task(task, config):
                CMPEXP_ONLY='FALSE', CLIM='false', TAYLOR='false', STD_DEV='false',
                TBEG=config['begdate'], TEND=config['enddate'], SEASONS=config['season'],
                LONSENV='0 360', LATSENV='-90 90', CINTDIFF='ON',
-               PLOTS_DIR=str(images), GRADSX=config['gradsx'], DDFFILE='NULL')
+               PLOTS_DIR=str(images), GRADSX=config['gradsx'], DDFFILE='NULL',
+               COLLECTION_QUICKPLOT_DIR=str(Path(__file__).resolve().parent))
     if task['kind'] == 'native':
         launcher = Path(__file__).with_name('run_native.csh')
         try:
