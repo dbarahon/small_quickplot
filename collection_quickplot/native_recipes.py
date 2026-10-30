@@ -36,14 +36,20 @@ def discover(geosutil, source, data, names):
     recipes = []
     skipped = []
     seen = set()
+    native_special = {
+        '/plots/precip/precip ': [('CN_PRCP','MOIST'),('LS_PRCP','MOIST'),('AN_PRCP','MOIST'),('TPREC','MOIST')],
+        '/plots/olr/olr ': [('OLR','IRRAD'),('OLC','IRRAD'),('RSR','SOLAR'),('RSC','SOLAR')],
+        '/plots/olr/olrcc5 ': [('OLR','IRRAD'),('OLCC5','IRRAD'),('RSR','SOLAR'),('RSC','SOLAR')],
+    }
     for line in (result.stdout + "\n" + result.stderr).splitlines():
-        if "run genplot" not in line or "-EXPORT" not in line:
+        matched_special = next((key for key in native_special if key in line), None)
+        if not matched_special and ("run genplot" not in line or "-EXPORT" not in line):
             continue
         number = PLOT_ID.search(line)
         fields = EXPORT_SECTION.search(line)
-        if not number or not fields:
+        if not number or (not fields and not matched_special):
             continue
-        sources = [tuple(x) for x in FIELD.findall(fields.group(1))]
+        sources = native_special[matched_special] if matched_special else [tuple(x) for x in FIELD.findall(fields.group(1))]
         if not sources or not any(x in selected for x in sources):
             continue
         pid = "PORTRAIT." + number.group(1)
@@ -51,7 +57,8 @@ def discover(geosutil, source, data, names):
             continue
         seen.add(pid)
         title = NAME.search(line)
-        name = title.group(1) if title else "plot" + number.group(1)
+        name = (matched_special.rsplit('/',1)[-1].strip() if matched_special
+                else title.group(1) if title else 'plot' + number.group(1))
         missing = [a + ":" + b for a, b in sources if (a, b) not in available]
         common = {"collection": names[0] if len(names) == 1 else "diagnostics",
                   "resolved_collection": "native", "variable": name,
