@@ -6,13 +6,22 @@ Read the installed portrait definitions directly. Running portrait.script
 import re
 from pathlib import Path
 
+SUPPORTED_RCS = {
+    "VERIFICATION.CERES_EBAF-TOA_Ed4.0.rc",
+    "VERIFICATION.ERA5.rc",
+    "VERIFICATION.GPCP.rc",
+    "VERIFICATION.ISCCP.rc",
+    "VERIFICATION.MAC-LWP.rc",
+    "VERIFICATION.SRB.rc",
+}
 GENPLOT = re.compile(r'run\s+genplot\s+-EXPORT\s+(.+?)\s+-NAME\s+(\S+)', re.I)
 FIELD = re.compile(r'\b([A-Za-z][A-Za-z0-9_]*)\:([A-Za-z][A-Za-z0-9_]*)\b')
 
 
 def verification_catalog(geosutil):
     folder = Path(geosutil) / "plots/VERIFICATION_RCS"
-    return sorted(p.name for p in folder.glob("VERIFICATION.*.rc") if p.is_file())
+    return sorted(p.name for p in folder.glob("VERIFICATION.*.rc")
+                  if p.is_file() and p.name in SUPPORTED_RCS)
 
 
 def discover(geosutil, source, data, names, levels):
@@ -32,6 +41,11 @@ def discover(geosutil, source, data, names, levels):
     selected = {(f["export"], f["component"]) for col in names for f in data[col]}
     available = {(f["export"], f["component"]) for fields in data.values() for f in fields}
     tasks, skipped, seen = [], [], set()
+    allowed = set(verification_catalog(geosutil))
+    def has_obs(name):
+        folder = Path(geosutil) / "plots" / name
+        return any((folder / rc).is_file() for rc in allowed)
+
     for line in source_text.splitlines():
         stripped = line.lstrip()
         if stripped.startswith("#"):
@@ -48,6 +62,8 @@ def discover(geosutil, source, data, names, levels):
             continue
         seen.add(key)
         missing = [f"{v}:{gc}" for v, gc in sources if (v, gc) not in available]
+        if not has_obs(name):
+            continue
         task = {"collection": names[0] if len(names) == 1 else "diagnostics",
                 "resolved_collection": "native", "variable": name,
                 "component": "QUICKPLOT", "kind": "native",
@@ -58,6 +74,26 @@ def discover(geosutil, source, data, names, levels):
         else:
             tasks.append(task)
 
+    # GEOS also has dedicated multi-panel observational recipes not expressed
+    # as genplot -EXPORT lines in portrait.script.
+    dedicated = {
+        "precip": ("precip/precip", (("CN_PRCP", "MOIST"), ("LS_PRCP", "MOIST"),
+                                    ("AN_PRCP", "MOIST"), ("TPREC", "MOIST"))),
+        "toa_radz": ("olr/olr", (("OLR", "IRRAD"), ("OLC", "IRRAD"),
+                                ("RSR", "SOLAR"), ("RSC", "SOLAR"))),
+    }
+    for name, (script, sources) in dedicated.items():
+        if not any(src in selected for src in sources):
+            continue
+        missing = [f"{v}:{gc}" for v, gc in sources if (v, gc) not in available]
+        if missing:
+            skipped.append({"variable": name, "reason": "missing exports: " + ", ".join(missing)})
+        else:
+            tasks.append({"collection": names[0] if len(names) == 1 else "diagnostics",
+                          "resolved_collection": "native", "variable": name,
+                          "component": "QUICKPLOT", "kind": "native_special",
+                          "script": script, "level": None, "dimension": "derived",
+                          "compare": True, "exports": [f"{v}:{gc}" for v, gc in sources]})
     if not tasks:
         skipped.append({"reason": "No eligible genplot recipes for selected collection",
                         "selected_exports": len(selected), "matching_recipes": len(seen)})
