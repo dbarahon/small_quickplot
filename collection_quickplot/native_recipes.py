@@ -83,3 +83,49 @@ def prepare_legacy_genplot(geosutil, work):
     end += len("              rgfile = result")
     text = text[:start] + "  rgfile = qfile.1\n" + text[end:]
     (work / "genplot.gs").write_text(text)
+
+def verification_catalog(geosutil):
+    """Return exactly the installed GEOS VERIFICATION_RCS catalog entries."""
+    folder = geosutil / "plots/VERIFICATION_RCS"
+    return sorted(p.name for p in folder.glob("VERIFICATION.*.rc") if p.is_file())
+
+
+def prepare_verification_selector(geosutil, work):
+    """Constrain getnumrc discovery to the installed VERIFICATION_RCS catalog.
+
+    MERRA-2/ERA5 operational comparisons are independent CMPEXP datasets.
+    If a GEOS installation lacks the catalog, preserve its native behavior.
+    """
+    allowed = verification_catalog(geosutil)
+    if not allowed:
+        return
+    import shlex
+    shell = [
+        "#!/bin/sh",
+        "dir=$1",
+        ": > rcfiles.selected",
+        'for rc in "$dir"/VERIFICATION*.rc; do',
+        '  [ -f "$rc" ] || continue',
+        '  case "${rc##*/}" in',
+        "    " + "|".join(shlex.quote(n) for n in allowed) + ")",
+        '       printf "%s\\n" "$rc" >> rcfiles.selected ;;',
+        "  esac",
+        "done",
+        "wc -l < rcfiles.selected > rcfiles",
+        "cat rcfiles.selected >> rcfiles",
+    ]
+    (work / "filter_verification.sh").write_text("\\n".join(shell) + "\\n")
+    (work / "getnumrc.gs").write_text(
+        "function getnumrc(args)\\n"
+        "dir = subwrd(args,1)\\n"
+        "'!/bin/sh ./filter_verification.sh 'dir\\n"
+        "numrc = sublin(read('rcfiles'),2)\\n"
+        "resultstr = numrc\\n"
+        "k = 1\\n"
+        "while (k <= numrc)\\n"
+        "  file = sublin(read('rcfiles'),2)\\n"
+        "  resultstr = resultstr' 'file\\n"
+        "  k = k + 1\\n"
+        "endwhile\\n"
+        "return resultstr\\n"
+    )
