@@ -50,24 +50,36 @@ say 'Computing zonal mean for 'EXPORT':'GC' 'mode' time 'tmin' to 'tmax
 * Longitude average. The -b flag uses bounds for zonal integration.
 'define qzonal = ave(qtmean,lon=0,lon=360,-b)'
 'set lon 0'
-'clear'
-'set grads off'
-'set grid on'
 if (mode = 'section')
-  'set gxout shaded'
-  'set zlog on'
   'set lev 1000 1'
-  'd qzonal'
-  'run cbarn'
-  'draw title 'expid' 'EXPORT':'GC' zonal mean latitude-pressure 'season
+  'run getenv "COLLECTION_QUICKPLOT_DIR"'
+  styledir = result
+  'run 'styledir'/geos_model_style.gs qzonal 'EXPORT' 'GC' zonal 'expid' 'season' section 'output
 else
+  * Optional 2D latitude profiles use the GEOS line presentation.
+  'clear'
+  'set display color white'
+  'set vpage off'
+  'set parea off'
+  'set frame on'
+  'set grid on'
+  'set xlopts 1 3 .11'
+  'set ylopts 1 3 .11'
+  'rgbset'
+  'set vpage 0 8.5 0 11'
+  'set parea 1.5 7.0 4.2 7.0'
   'set gxout line'
   'set ccolor 4'
   'set cthick 5'
   'd qzonal'
-  'draw title 'expid' 'EXPORT':'GC' zonal mean latitude profile 'season
+  'set vpage off'
+  'set string 1 c 6'
+  'set strsiz .13'
+  'draw string 4.25 10.75 'EXPORT':'GC' Zonal Mean'
+  'set strsiz .10'
+  'draw string 4.25 10.48 'expid'  'season'  (Model Only)'
+  filename = output'/'EXPORT'_'GC'_line_'season'.png'
+  'printim 'filename' white x1000 y1100'
+  say 'Finished Creating: 'filename
 endif
-filename = output'/'EXPORT'_'GC'_'mode'_'season'.png'
-'printim 'filename' white x1000 y850'
-say 'Finished Creating: 'filename
 return
