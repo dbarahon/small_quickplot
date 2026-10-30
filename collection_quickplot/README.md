@@ -40,6 +40,7 @@ Default selection:
 - Model-only latitude-pressure zonal sections for 3D fields.
 - Surface/2D maps and latitude-profile line plots.
 - Model-only four-panel TOA radiation diagnostic when OLR, OLC, RSR, RSC are available.
+- Separate native GEOS verification panels via `hcmp2` for standard U, V, T, ZLE, Q, RH2, SLP, QLTOT, and QITOT fields, where configured verification resources exist.
 - Eight concurrent GrADS tasks.
 
 To override in an interactive compute allocation:
@@ -53,7 +54,7 @@ python3 collection_quickplot.py \
   --output /path/to/new/collections_JJA_run --execute
 ```
 
-`--levels 850,500,250,100` adds 100 hPa. `--no-zonal` omits zonal
+`--levels 850,500,250,100` adds 100 hPa. `--no-verification` skips the additional GEOS `hcmp2` verification tasks. These use the installed GEOS verification configuration, not arbitrary new observational datasets. If no corresponding observation is available, the verification task will produce no plot and be marked failed, while its model-only counterpart is retained. `--no-zonal` omits zonal
 mean diagrams, and `--exclude-2d` omits surface maps and line profiles.
 Use `--collections all` to choose all enabled HISTORY collections,
 and `--compare /path/to/other/experiment` (repeatable) for GEOS
@@ -114,3 +115,7 @@ The model-only styling path and NetCDF classification still require
 verification on Discover. In particular, locally installed GEOS GrADS
 scripts may differ from the upstream version; compare a few representative
 maps and zonal products before a large production run.
+
+## Latest GrADS zonal fix
+
+The model-only zonal and TOA scripts now close their `printim` command strings, correcting the `Non-terminated constant` failure previously reported for `ZLE:DYN` and `SLP:DYN`. The normal 3D zonal product is a latitude-pressure plot; 2D fields yield latitude-profile line plots. These new routines and the GEOS verification dispatch require testing on Discover.
