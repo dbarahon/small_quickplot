@@ -20,7 +20,6 @@ season = subwrd(args,4)
 'set frame on'
 'set xlopts 1 3 .11'
 'set ylopts 1 3 .11'
-'rgbset'
 fac = 1
 if (name = 'precip')
   e1 = 'CN_PRCP' ; g1 = 'MOIST'
