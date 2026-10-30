@@ -115,7 +115,7 @@ VERIFICATION_FIELDS = {
 
 
 def create_tasks(data, names, levels, zonal, comparisons, dimensions,
-                 include_2d=False, verification=True):
+                 include_2d=False, verification=True, lines=False):
     priority = (['geosgcm_prog'] if 'geosgcm_prog' in data else []) + [
         name for name in data if name != 'geosgcm_prog']
     owner = {}
@@ -149,7 +149,7 @@ def create_tasks(data, names, levels, zonal, comparisons, dimensions,
                         tasks.append(dict(common, kind='verification', level=lev))
             elif kind == '2d' and include_2d:
                 tasks.append(dict(common, kind='map', level=None))
-                if zonal:
+                if lines:
                     tasks.append(dict(common, kind='line', level=None))
                 if verification and key in VERIFICATION_FIELDS:
                     tasks.append(dict(common, kind='verification', level='1000'))
@@ -281,7 +281,8 @@ def main(argv=None):
     p.add_argument('--geosutil', type=Path, default=os.environ.get('GEOSUTIL'))
     p.add_argument('--output', type=Path, required=True)
     p.add_argument('--levels', default='850,500,250', help='Pressure levels for 3D fields (default: 850,500,250)')
-    p.add_argument('--no-zonal', action='store_true', help='Disable zonal mean plots for 3D fields')
+    p.add_argument('--no-zonal', action='store_true', help='Disable 3D latitude-pressure sections')
+    p.add_argument('--lines', action='store_true', help='Opt in to latitude profile lines for 2D fields')
     p.add_argument('--exclude-2d', action='store_true', help='Skip 2D maps and latitude-profile lines (included by default)')
     p.add_argument('--no-verification', action='store_true', help='Skip native GEOS hcmp2 verification panels for standard fields')
     p.add_argument('--workers', type=int, default=8)
@@ -316,7 +317,7 @@ def main(argv=None):
     except RuntimeError as exc:
         p.error(str(exc))
     tasks, skipped = create_tasks(data, names, levels, not a.no_zonal,
-                                  a.compare, dimensions, not a.exclude_2d, not a.no_verification)
+                                  a.compare, dimensions, not a.exclude_2d, not a.no_verification, a.lines)
     for script_name in ('plots/hcmp/hcmp2', 'plots/zcmp/progz'):
         if not (a.geosutil / script_name).is_file():
             p.error('Required GEOS plotting script missing: ' + script_name)
