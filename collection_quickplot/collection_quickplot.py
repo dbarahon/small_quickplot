@@ -142,12 +142,27 @@ def create_tasks(data, names, levels, zonal, comparisons, dimensions, include_2d
                     tasks.append(dict(common, kind='line', level=None))
             else:
                 skipped.append(dict(common, reason='2D excluded' if kind == '2d' else 'unknown/unsupported dimensions'))
+    # GEOS radiation line diagnostic is a four-field plot, not an individual map.
+    radiation = [('OLR', 'IRRAD'), ('OLC', 'IRRAD'),
+                 ('RSR', 'SOLAR'), ('RSC', 'SOLAR')]
+    available = {(f['export'], f['component']) for fields in data.values() for f in fields}
+    if all(field in available for field in radiation):
+        tasks.append({'collection': 'diagnostics', 'resolved_collection': 'diagnostics',
+                      'variable': 'TOA_radz', 'component': 'RADIATION',
+                      'kind': 'radiation', 'level': None, 'dimension': 'derived',
+                      'compare': bool(comparisons)})
+    else:
+        skipped.append({'collection': 'diagnostics', 'variable': 'TOA_radz',
+                        'component': 'RADIATION', 'reason': 'missing OLR/OLC/RSR/RSC exports'})
     return tasks, skipped
 
 
 def task_command(task, expid, season, output, geosutil):
     """Use the legacy GEOS scripts that work with GEOS-configured OpenGrADS."""
     var, comp = task['variable'], task['component']
+    if task['kind'] == 'radiation':
+        script = Path(__file__).with_name('model_radiation.gs')
+        return f'run {script} {expid} {output} {season}'
     if task['kind'] in ('zonal', 'line'):
         if not task['compare']:
             script = Path(__file__).with_name('model_zonal.gs')
@@ -250,7 +265,7 @@ def main(argv=None):
     p.add_argument('--output', type=Path, required=True)
     p.add_argument('--levels', default='850,500,250', help='Pressure levels for 3D fields (default: 850,500,250)')
     p.add_argument('--no-zonal', action='store_true', help='Disable zonal mean plots for 3D fields')
-    p.add_argument('--exclude-2d', action='store_true', help='Skip 2D fields (included by default)')
+    p.add_argument('--exclude-2d', action='store_true', help='Skip 2D maps and latitude-profile lines (included by default)')
     p.add_argument('--workers', type=int, default=8)
     p.add_argument('--timeout', type=int, default=1800)
     p.add_argument('--gradsx', default='auto', help='auto uses GEOS configure GRADS')
