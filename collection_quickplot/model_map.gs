@@ -1,4 +1,4 @@
-* Standalone model-only map. Avoid hcmp2's verification requirement and
+* GEOS-style model-only map. Avoid hcmp2's verification requirement and
 * genplot's OpenGrADS 2.0.1 sdfwrite time-coordinate failure.
 * Args: EXPORT GC LEVEL EXPID OUTPUT SEASON
 function collection_map(args)
@@ -22,7 +22,7 @@ if (qfile = 'NULL')
   return
 endif
 'set dfile 'qfile
-'set lev 'level
+if (level != 'surface')\n  'set lev 'level\nendif
 'set lon 0 360'
 'set lat -90 90'
 'setdates'
@@ -55,8 +55,8 @@ if (subwrd(result,1) = 'Syntax')
   say 'ERROR: unable to display qmean'
   return
 endif
-'draw title 'expid' 'EXPORT':'GC' 'level' 'season
+'draw title 'expid'   'EXPORT':'GC'   'level'   'season' mean'\n* The GEOS-installed cbarn script provides the conventional shaded color key.\n'run cbarn'
 filename = output'/'EXPORT'_'GC'_'level'_'season'.png'
-'printim 'filename' white'
+'printim 'filename' white x1000 y850'
 say 'Finished Creating: 'filename
 return
