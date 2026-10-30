@@ -12,14 +12,6 @@ if ( $status != 0 ) exit 2
 if ( ! -f .quickplotrc ) exit 2
 source .quickplotrc
 if ( $status != 0 ) exit 2
-# Prefer per-task verification selectors without modifying installed GEOS scripts.
-if ( -f getnumrc.gs ) then
-    if ( $?GASCRP ) then
-        setenv GASCRP "${cwd}:$GASCRP"
-    else
-        setenv GASCRP "${cwd}:$GEOSUTIL/plots/grads_util"
-    endif
-endif
 # Configure may set plotting environment; reassert per-task selections.
 setenv CMPEXP_ONLY FALSE
 setenv CLIM false
