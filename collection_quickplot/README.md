@@ -7,12 +7,33 @@ It leaves all successful image products in **one flat `plots/` directory**.
 
 ## Run on Discover
 
-Edit `gcm_collections.j` to set the experiment, `GEOSUTIL`, selected
-collections, dates, season, and levels. Submit from this directory:
+Edit `gcm_collections.j` to set the experiment, `GEOSUTIL`, dates,
+season, and levels. Each Slurm job processes **one** collection. From
+this directory, submit one collection:
 
 ```csh
-sbatch gcm_collections.j
+sbatch gcm_collections.j geosgcm_prog
 ```
+
+Or submit a separate job for each requested collection:
+
+```csh
+tcsh submit_collections.csh geosgcm_prog geosgcm_moist geosgcm_surf geosgcm_aercloud
+```
+
+With no arguments, `submit_collections.csh` uses those four default
+collections. Each submission has its own Slurm job ID, stdout file,
+and output directory:
+
+```text
+experiment/plot/collections_JJA_geosgcm_prog_JOBID/plots/
+experiment/plot/collections_JJA_geosgcm_moist_JOBID/plots/
+experiment/plot/collections_JJA_geosgcm_surf_JOBID/plots/
+experiment/plot/collections_JJA_geosgcm_aercloud_JOBID/plots/
+```
+
+Each collection's final plots remain together in its own flat `plots/`
+directory; jobs never write to the same output directory concurrently.
 
 Default selection:
 - 3D horizontal maps at **850, 500, and 250 hPa**.
