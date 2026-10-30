@@ -188,7 +188,7 @@ def run_task(task, config):
                                       'Command not found.', 'ERROR: GrADS executable',
                                       'gadsdf:', 'Request is completely outside file limits',
                                       'Cannot contour grid - all undefined values',
-                                      'SET Error:', 'DEFINE error:', 'ERROR:')):
+                                      'SET Error:', 'DEFINE error:', 'Unable to locate ENDIF', 'ERROR:')):
             state = 'failed'
     except subprocess.TimeoutExpired:
         state = 'timeout'
@@ -198,7 +198,7 @@ def run_task(task, config):
     if state == 'ok' and not found:
         state = 'failed'
         with (work / 'run.log').open('a') as log:
-            log.write('\\nERROR: no GIF/PNG produced by task\\n')
+            log.write('\nERROR: no GIF/PNG produced by task\n')
     if state == 'ok':
         dest = Path(config['out']) / 'plots'
         dest.mkdir(exist_ok=True)
