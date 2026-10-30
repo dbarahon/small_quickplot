@@ -22,7 +22,9 @@ if (qfile = 'NULL')
   return
 endif
 'set dfile 'qfile
-if (level != 'surface')\n  'set lev 'level\nendif
+if (level != 'surface')
+  'set lev 'level
+endif
 'set lon 0 360'
 'set lat -90 90'
 'setdates'
@@ -55,7 +57,9 @@ if (subwrd(result,1) = 'Syntax')
   say 'ERROR: unable to display qmean'
   return
 endif
-'draw title 'expid'   'EXPORT':'GC'   'level'   'season' mean'\n* The GEOS-installed cbarn script provides the conventional shaded color key.\n'run cbarn'
+'draw title 'expid'   'EXPORT':'GC'   'level'   'season' mean'
+* The GEOS-installed cbarn script provides the conventional shaded color key.
+'run cbarn'
 filename = output'/'EXPORT'_'GC'_'level'_'season'.png'
 'printim 'filename' white x1000 y850'
 say 'Finished Creating: 'filename
