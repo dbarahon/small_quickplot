@@ -233,7 +233,8 @@ def main(argv=None):
     p.add_argument('--geosutil', type=Path, default=os.environ.get('GEOSUTIL'))
     p.add_argument('--output', type=Path, required=True)
     p.add_argument('--levels', default='850,500,250', help='Pressure levels for 3D fields (default: 850,500,250)')
-    p.add_argument('--no-zonal', action='store_true', help='Disable zonal mean plots for 3D fields')\n    p.add_argument('--include-2d', action='store_true', help='Also plot horizontal 2D fields')
+    p.add_argument('--no-zonal', action='store_true', help='Disable zonal mean plots for 3D fields')
+    p.add_argument('--include-2d', action='store_true', help='Also plot horizontal 2D fields')
     p.add_argument('--workers', type=int, default=8)
     p.add_argument('--timeout', type=int, default=1800)
     p.add_argument('--gradsx', default='auto', help='auto uses GEOS configure GRADS')
@@ -271,7 +272,9 @@ def main(argv=None):
         if not (a.geosutil / script_name).is_file():
             p.error('Required GEOS plotting script missing: ' + script_name)
     out = a.output.resolve()
-    out.mkdir(parents=True, exist_ok=False)\n    (out / 'plots').mkdir()\n    (out / 'logs').mkdir()
+    out.mkdir(parents=True, exist_ok=False)
+    (out / 'plots').mkdir()
+    (out / 'logs').mkdir()
     # Use the unmodified GEOS plotting scripts and configured GrADS runtime.
     config = {'out': str(out), 'source': str(source), 'history': str(rc),
               'geosutil': str(a.geosutil.resolve()), 'expid': expmatch.group(1),
