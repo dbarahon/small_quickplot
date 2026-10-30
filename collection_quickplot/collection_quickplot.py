@@ -333,12 +333,15 @@ def main(argv=None):
     p.add_argument('--exclude-2d', action='store_true', help='Skip 2D maps and latitude-profile lines (included by default)')
     p.add_argument('--no-verification', action='store_true', help='Skip all GEOS verification tasks')
     p.add_argument('--no-native', action='store_true', help='Skip native GEOS QuickPlot derived/observational recipes')
+    p.add_argument('--native-limit', type=int, default=0, help='Limit native recipe tasks for a small test; 0 means all')
     p.add_argument('--workers', type=int, default=8)
     p.add_argument('--timeout', type=int, default=1800)
     p.add_argument('--gradsx', default='auto', help='auto uses GEOS configure GRADS')
     p.add_argument('--execute', action='store_true', help='Run the plan rather than only writing it')
     p.add_argument('--keep-workdirs', action='store_true', help='Retain all task working directories')
     a = p.parse_args(argv)
+    if a.native_limit < 0:
+        p.error('native-limit must be nonnegative')
     if a.workers < 1 or a.timeout < 1:
         p.error('workers and timeout must be positive')
     if not a.geosutil or not (a.geosutil / 'plots/configure').exists():
@@ -368,6 +371,9 @@ def main(argv=None):
                                   a.compare, dimensions, not a.exclude_2d, not a.no_verification, a.lines)
     if not a.no_verification and not a.no_native:
         native, native_skipped = discover_native_recipes(a.geosutil, source, data, names)
+        if a.native_limit:
+            native = native[:a.native_limit]
+        print(f'Native GEOS verification recipes selected: {len(native)}')
         tasks.extend(native)
         skipped.extend(native_skipped)
     for script_name in ('plots/hcmp/hcmp2', 'plots/zcmp/progz'):
@@ -402,6 +408,9 @@ def main(argv=None):
     (out/'summary.json').write_text(json.dumps(results, indent=2))
     failures = sum(x['state'] != 'ok' for x in results)
     print(f'{len(results) - failures}/{len(results)} tasks produced new graphics without detected errors.')
+    for kind in sorted({x['task']['kind'] for x in results}):
+        entries = [x for x in results if x['task']['kind'] == kind]
+        print(f'  {kind}: {sum(x["state"] == "ok" for x in entries)}/{len(entries)} successful')
     return 1 if failures else 0
 
 
