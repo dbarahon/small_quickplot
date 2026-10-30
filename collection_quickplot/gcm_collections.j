@@ -24,6 +24,9 @@ set season = JJA
 set begdate = 200906
 set enddate = 200908
 set workers = 8
+set levels = 850,500,250
+# Zonal means are enabled by default. To omit them, add --no-zonal.
+# To include surface/2D fields, add --include-2d.
 set run = "$expdir/plot/collections_${season}_${SLURM_JOB_ID}"
 set script = "$SLURM_SUBMIT_DIR/collection_quickplot.py"
 if ( ! -f "$script" ) then
@@ -33,5 +36,5 @@ endif
 python3 "$script" --source "$expdir" --geosutil "$GEOSUTIL" \
     --collections $collections --season "$season" \
     --begdate "$begdate" --enddate "$enddate" \
-    --output "$run" --workers "$workers" --execute
+    --levels "$levels" --output "$run" --workers "$workers" --execute
 exit $status
