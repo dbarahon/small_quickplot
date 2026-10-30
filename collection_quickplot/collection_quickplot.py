@@ -11,7 +11,7 @@ import subprocess
 import sys
 import time
 
-from native_recipes import (discover as discover_native_recipes, prepare_legacy_genplot,
+from native_recipes import (discover as discover_native_recipes,
                             verification_catalog)
 
 try:
@@ -200,6 +200,10 @@ def create_tasks(data, names, levels, zonal, comparisons, dimensions,
 def task_command(task, expid, season, output, geosutil):
     """Use the legacy GEOS scripts that work with GEOS-configured OpenGrADS."""
     var, comp = task['variable'], task['component']
+    if task['kind'] == 'native':
+        exports = ' '.join(task['exports'])
+        return (f'run genplot -EXPORT {exports} -NAME {var} -EXPID {expid} '
+                f'-OUTPUT {output} -DEBUG no_debug -SEASON {season}')
     if task['kind'] == 'derived':
         script = Path(__file__).with_name('model_derived.gs')
         return f'run {script} {var} {expid} {output} {season}'
@@ -246,23 +250,9 @@ def run_task(task, config):
                LONSENV='0 360', LATSENV='-90 90', CINTDIFF='ON',
                PLOTS_DIR=str(images), GRADSX=config['gradsx'], DDFFILE='NULL',
                COLLECTION_QUICKPLOT_DIR=str(Path(__file__).resolve().parent))
-    if task['kind'] == 'native':
-        launcher = Path(__file__).with_name('run_native.csh')
-        try:
-            prepare_legacy_genplot(Path(config['geosutil']), work)
-        except (OSError, RuntimeError) as exc:
-            logpath = Path(config['out']) / 'logs' / (tag + '.log')
-            logpath.write_text('ERROR: Native QuickPlot compatibility preparation: ' + str(exc) + '\n')
-            if not config['keep_workdirs']:
-                shutil.rmtree(work)
-            return dict(task=task, state='failed', graphics=[], seconds=0.0, log=str(logpath))
-        cmd = ['tcsh', '-f', str(launcher), config['geosutil'], config['source'],
-               config['history'], config['gradsx'], config['expid'],
-               task['plot_id'], str(images), config['season']]
-    else:
-        launcher = Path(__file__).with_name('run_grads.csh')
-        cmd = ['tcsh', '-f', str(launcher), config['geosutil'], config['source'],
-               config['history'], config['gradsx'], command]
+    launcher = Path(__file__).with_name('run_grads.csh')
+    cmd = ['tcsh', '-f', str(launcher), config['geosutil'], config['source'],
+           config['history'], config['gradsx'], command]
     t0 = time.monotonic()
     state = 'ok'
     try:
