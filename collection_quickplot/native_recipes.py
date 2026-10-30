@@ -78,7 +78,7 @@ def discover(geosutil, source, data, names, levels):
     # as genplot -EXPORT lines in portrait.script.
     dedicated = {
         "precip": ("precip/precip", (("CN_PRCP", "MOIST"), ("LS_PRCP", "MOIST"),
-                                    ("AN_PRCP", "MOIST"), ("TPREC", "MOIST"))),
+                                    ("AN_PRCP", "MOIST"))),
         "toa_radz": ("olr/olr", (("OLR", "IRRAD"), ("OLC", "IRRAD"),
                                 ("RSR", "SOLAR"), ("RSC", "SOLAR"))),
     }
@@ -86,6 +86,8 @@ def discover(geosutil, source, data, names, levels):
         if not any(src in selected for src in sources):
             continue
         missing = [f"{v}:{gc}" for v, gc in sources if (v, gc) not in available]
+        if name == "precip" and missing and ("TPREC", "MOIST") in available:
+            missing = []
         if missing:
             skipped.append({"variable": name, "reason": "missing exports: " + ", ".join(missing)})
         else:
