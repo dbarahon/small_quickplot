@@ -11,6 +11,8 @@ import subprocess
 import sys
 import time
 
+from native_recipes import discover as discover_native_recipes, prepare_legacy_genplot
+
 try:
     from netCDF4 import Dataset
 except ImportError:
@@ -229,6 +231,8 @@ def task_command(task, expid, season, output, geosutil):
 def run_task(task, config):
     col, var, comp = task['collection'], task['variable'], task['component']
     tag = f'{col}_{var}_{comp}_{task["kind"]}' + (f'_{task["level"]}' if task['level'] else '')
+    if task['kind'] == 'native':
+        tag += '_' + task['plot_id'].replace('.', '_')
     work = Path(config['out']) / 'work' / tag
     images = work / 'images'
     images.mkdir(parents=True, exist_ok=True)
@@ -240,9 +244,23 @@ def run_task(task, config):
                TBEG=config['begdate'], TEND=config['enddate'], SEASONS=config['season'],
                LONSENV='0 360', LATSENV='-90 90', CINTDIFF='ON',
                PLOTS_DIR=str(images), GRADSX=config['gradsx'], DDFFILE='NULL')
-    launcher = Path(__file__).with_name('run_grads.csh')
-    cmd = ['tcsh', '-f', str(launcher), config['geosutil'], config['source'],
-           config['history'], config['gradsx'], command]
+    if task['kind'] == 'native':
+        launcher = Path(__file__).with_name('run_native.csh')
+        try:
+            prepare_legacy_genplot(Path(config['geosutil']), work)
+        except (OSError, RuntimeError) as exc:
+            logpath = Path(config['out']) / 'logs' / (tag + '.log')
+            logpath.write_text('ERROR: Native QuickPlot compatibility preparation: ' + str(exc) + '\\n')
+            if not config['keep_workdirs']:
+                shutil.rmtree(work)
+            return dict(task=task, state='failed', graphics=[], seconds=0.0, log=str(logpath))
+        cmd = ['tcsh', '-f', str(launcher), config['geosutil'], config['source'],
+               config['history'], config['gradsx'], config['expid'],
+               task['plot_id'], str(images), config['season']]
+    else:
+        launcher = Path(__file__).with_name('run_grads.csh')
+        cmd = ['tcsh', '-f', str(launcher), config['geosutil'], config['source'],
+               config['history'], config['gradsx'], command]
     t0 = time.monotonic()
     state = 'ok'
     try:
@@ -311,7 +329,8 @@ def main(argv=None):
     p.add_argument('--no-zonal', action='store_true', help='Disable 3D latitude-pressure sections')
     p.add_argument('--lines', action='store_true', help='Opt in to latitude profile lines for 2D fields')
     p.add_argument('--exclude-2d', action='store_true', help='Skip 2D maps and latitude-profile lines (included by default)')
-    p.add_argument('--no-verification', action='store_true', help='Skip native GEOS hcmp2 verification panels for standard fields')
+    p.add_argument('--no-verification', action='store_true', help='Skip all GEOS verification tasks')
+    p.add_argument('--no-native', action='store_true', help='Skip native GEOS QuickPlot derived/observational recipes')
     p.add_argument('--workers', type=int, default=8)
     p.add_argument('--timeout', type=int, default=1800)
     p.add_argument('--gradsx', default='auto', help='auto uses GEOS configure GRADS')
