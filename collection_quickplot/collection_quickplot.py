@@ -155,24 +155,51 @@ def create_tasks(data, names, levels, zonal, comparisons, dimensions,
                     tasks.append(dict(common, kind='verification', level='1000'))
             else:
                 skipped.append(dict(common, reason='2D excluded' if kind == '2d' else 'unknown/unsupported dimensions'))
-    # GEOS radiation line diagnostic is a four-field plot, not an individual map.
+    # Match GEOS QuickPlot modform.gs source field lists, not inferred sums.
+    recipes = {
+        'precip': [('CN_PRCP', 'MOIST'), ('LS_PRCP', 'MOIST'), ('AN_PRCP', 'MOIST')],
+        'olrcf': [('OLC', 'IRRAD'), ('OLR', 'IRRAD')],
+        'osrcf': [('RSC', 'SOLAR'), ('RSR', 'SOLAR')],
+        'toacf': [('OLC', 'IRRAD'), ('OLR', 'IRRAD'),
+                  ('OSRCLR', 'SOLAR'), ('OSR', 'SOLAR')],
+    }
+    available = {(f['export'], f['component']) for fields in data.values() for f in fields}
+    selected = {(f['export'], f['component']) for col in names for f in data[col]}
+    for name, needed in recipes.items():
+        if not any(k in selected for k in needed):
+            continue
+        common = {'collection': names[0] if len(names) == 1 else 'diagnostics',
+                  'resolved_collection': 'diagnostics', 'variable': name,
+                  'component': 'DERIVED', 'kind': 'derived', 'level': None,
+                  'dimension': 'derived', 'compare': False}
+        if all(k in available for k in needed):
+            tasks.append(common)
+        else:
+            skipped.append(dict(common, reason='missing exports: ' +
+                                ','.join(v + ':' + c for v, c in needed if (v, c) not in available)))
+    # TOA zonal radiation requires all 4 exports and is created only in
+    # a job with at least one selected radiation export.
     radiation = [('OLR', 'IRRAD'), ('OLC', 'IRRAD'),
                  ('RSR', 'SOLAR'), ('RSC', 'SOLAR')]
-    available = {(f['export'], f['component']) for fields in data.values() for f in fields}
-    if all(field in available for field in radiation):
-        tasks.append({'collection': 'diagnostics', 'resolved_collection': 'diagnostics',
-                      'variable': 'TOA_radz', 'component': 'RADIATION',
-                      'kind': 'radiation', 'level': None, 'dimension': 'derived',
-                      'compare': bool(comparisons)})
-    else:
-        skipped.append({'collection': 'diagnostics', 'variable': 'TOA_radz',
-                        'component': 'RADIATION', 'reason': 'missing OLR/OLC/RSR/RSC exports'})
+    if any(k in selected for k in radiation):
+        if all(k in available for k in radiation):
+            tasks.append({'collection': names[0] if len(names) == 1 else 'diagnostics',
+                          'resolved_collection': 'diagnostics',
+                          'variable': 'TOA_radz', 'component': 'RADIATION',
+                          'kind': 'radiation', 'level': None, 'dimension': 'derived',
+                          'compare': False})
+        else:
+            skipped.append({'collection': 'diagnostics', 'variable': 'TOA_radz',
+                            'component': 'RADIATION', 'reason': 'missing OLR/OLC/RSR/RSC exports'})
     return tasks, skipped
 
 
 def task_command(task, expid, season, output, geosutil):
     """Use the legacy GEOS scripts that work with GEOS-configured OpenGrADS."""
     var, comp = task['variable'], task['component']
+    if task['kind'] == 'derived':
+        script = Path(__file__).with_name('model_derived.gs')
+        return f'run {script} {var} {expid} {output} {season}'
     if task['kind'] == 'radiation':
         script = Path(__file__).with_name('model_radiation.gs')
         return f'run {script} {expid} {output} {season}'
