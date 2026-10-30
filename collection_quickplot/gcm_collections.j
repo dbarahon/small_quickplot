@@ -31,8 +31,11 @@ set begdate = 200906
 set enddate = 200908
 set workers = 8
 set levels = 850,500,250
+set native_limit = 0
 # Zonal means are enabled by default. To omit them, add --no-zonal.
-# Surface/2D fields are included by default; --exclude-2d omits them.
+# Surface/2D maps are included; latitude-profile lines require --lines.
+# native_limit=0 runs all eligible native QuickPlot verification recipes.
+# Set native_limit=5 for an inexpensive initial compatibility test.
 set run = "$expdir/plot/collections_${season}_${collection}_${SLURM_JOB_ID}"
 set script = "$SLURM_SUBMIT_DIR/collection_quickplot.py"
 if ( ! -f "$script" ) then
@@ -42,5 +45,6 @@ endif
 python3 "$script" --source "$expdir" --geosutil "$GEOSUTIL" \
     --collections "$collection" --season "$season" \
     --begdate "$begdate" --enddate "$enddate" \
-    --levels "$levels" --output "$run" --workers "$workers" --execute
+    --levels "$levels" --native-limit "$native_limit" \
+    --output "$run" --workers "$workers" --execute
 exit $status
