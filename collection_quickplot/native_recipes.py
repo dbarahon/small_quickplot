@@ -74,7 +74,9 @@ def discover(geosutil, source, data, names, levels):
         else:
             recipes.append(common)
     if not recipes:
-        skipped.append({"reason": "No matching native verification recipes found in portrait listing"})
+        skipped.append({"reason": "No matching native verification recipes found in portrait listing",
+                        "diagnostic": "returncode=%s; stdout_tail=%s; stderr_tail=%s" %
+                        (result.returncode, result.stdout[-1200:], result.stderr[-1200:])})
     return recipes, skipped
 
 
