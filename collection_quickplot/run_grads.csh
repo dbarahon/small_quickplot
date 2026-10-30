@@ -33,6 +33,17 @@ setenv CLIMATE false
 setenv DEBUG no_debug
 if ( ! $?CMPEXP ) setenv CMPEXP NULL
 if ( "$CMPEXP" == "" ) setenv CMPEXP NULL
+# Match QuickPlot's operational defaults when these verification paths exist.
+set ops = ()
+if ( $?VERIFICATION ) then
+    if ( -d "$VERIFICATION/MERRA2_MEANS" ) set ops = ( $ops "$VERIFICATION/MERRA2_MEANS:A" )
+    if ( -d "$VERIFICATION/ERA5_Monthly" ) set ops = ( $ops "$VERIFICATION/ERA5_Monthly:V" )
+endif
+if ( "$CMPEXP" == "NULL" ) then
+    setenv CMPEXP "$ops NULL"
+else
+    setenv CMPEXP "$CMPEXP $ops NULL"
+endif
 if ( ! -f "$GEOSUTIL/plots/chckhist.new" ) exit 2
 /bin/cp "$GEOSUTIL/plots/chckhist.new" chckhist
 # Use the executable configured by installed GEOS unless overridden.
