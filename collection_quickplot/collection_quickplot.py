@@ -401,10 +401,13 @@ def main(argv=None):
     # the filesystem with repeated GEOS setup artifacts if initialization fails.
     first = run_task(tasks[0], config) if tasks else None
     results = [first] if first else []
-    if first and first['state'] != 'ok':
+    if first and not first['graphics']:
         (out/'summary.json').write_text(json.dumps(results, indent=2))
-        print('STOP: first task failed; inspect ' + first['log'])
+        print('STOP: first task produced no graphics; inspect ' + first['log'])
         return 1
+    if first and first['state'] != 'ok':
+        print('WARNING: first task produced graphics but reported errors; '
+              'continuing other tasks. Inspect ' + first['log'])
     with concurrent.futures.ThreadPoolExecutor(max_workers=a.workers) as pool:
         results.extend(pool.map(lambda task: run_task(task, config), tasks[1:]))
     (out/'summary.json').write_text(json.dumps(results, indent=2))
