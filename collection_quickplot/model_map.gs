@@ -17,7 +17,6 @@ season = subwrd(args,6)
 'set frame on'
 'set xlopts 1 3 .11'
 'set ylopts 1 3 .11'
-'rgbset'
 'run getvar 'EXPORT' 'GC
 qname = subwrd(result,1)
 qfile = subwrd(result,2)
