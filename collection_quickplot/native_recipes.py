@@ -114,18 +114,18 @@ def prepare_verification_selector(geosutil, work):
         "wc -l < rcfiles.selected > rcfiles",
         "cat rcfiles.selected >> rcfiles",
     ]
-    (work / "filter_verification.sh").write_text("\\n".join(shell) + "\\n")
+    (work / "filter_verification.sh").write_text("\n".join(shell) + "\n")
     (work / "getnumrc.gs").write_text(
-        "function getnumrc(args)\\n"
-        "dir = subwrd(args,1)\\n"
-        "'!/bin/sh ./filter_verification.sh 'dir\\n"
-        "numrc = sublin(read('rcfiles'),2)\\n"
-        "resultstr = numrc\\n"
-        "k = 1\\n"
-        "while (k <= numrc)\\n"
-        "  file = sublin(read('rcfiles'),2)\\n"
-        "  resultstr = resultstr' 'file\\n"
-        "  k = k + 1\\n"
-        "endwhile\\n"
-        "return resultstr\\n"
+        "function getnumrc(args)\n"
+        "dir = subwrd(args,1)\n"
+        "'!/bin/sh ./filter_verification.sh 'dir\n"
+        "numrc = sublin(read('rcfiles'),2)\n"
+        "resultstr = numrc\n"
+        "k = 1\n"
+        "while (k <= numrc)\n"
+        "  file = sublin(read('rcfiles'),2)\n"
+        "  resultstr = resultstr' 'file\n"
+        "  k = k + 1\n"
+        "endwhile\n"
+        "return resultstr\n"
     )
