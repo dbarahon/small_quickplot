@@ -49,13 +49,6 @@ setenv CMPEXP "$comparisons NULL"
 if ( ! -f "$GEOSUTIL/plots/chckhist.new" ) exit 2
 /bin/cp "$GEOSUTIL/plots/chckhist.new" chckhist
 
-# An optional, locally patched genplot.gs lives in the current task directory.
-# It takes precedence over GEOSUTIL without modifying the installed scripts.
-if ( $?GASCRP ) then
-    setenv GASCRP "${cwd}:$GASCRP"
-else
-    setenv GASCRP "${cwd}:$GEOSUTIL/plots/grads_util"
-endif
 echo "Native QuickPlot recipe: $plotid; GrADS: $gradsx"
 tcsh -f "$GEOSUTIL/plots/portrait.script" \
     -expid "$expid" -source "$SOURCE" -plot "$plotid" \
