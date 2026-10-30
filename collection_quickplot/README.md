@@ -37,8 +37,10 @@ Options for `collection_quickplot.py`:
 - `--lines`: additionally make 2D zonal-mean latitude profiles.
 - `--no-zonal`: omit 3D zonal sections.
 - `--exclude-2d`: omit 2D maps (and 2D lines).
-- `--no-native`: disable native GEOS verification and derived recipes,
-  retaining the usual `hcmp2` tasks.
+- `--no-native`: disable native GEOS verification recipes,
+  retaining model-only derived maps and the usual `hcmp2` tasks.
+- `--native-limit 5`: run only the first five matching native recipes for a
+  short compatibility test; omit it to include all matching recipes.
 - `--no-verification`: disable both native recipes and `hcmp2`
   verification plots.
 - `--compare /path/to/experiment`: add an explicit experiment comparison
