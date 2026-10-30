@@ -15,9 +15,10 @@ sbatch gcm_collections.j
 ```
 
 Default selection:
-- 3D fields only.
-- Horizontal maps at **850, 500, and 250 hPa**.
-- One zonal-mean diagram per 3D field.
+- 3D horizontal maps at **850, 500, and 250 hPa**.
+- Model-only latitude-pressure zonal sections for 3D fields.
+- Surface/2D maps and latitude-profile line plots.
+- Model-only four-panel TOA radiation diagnostic when OLR, OLC, RSR, RSC are available.
 - Eight concurrent GrADS tasks.
 
 To override in an interactive compute allocation:
@@ -32,7 +33,7 @@ python3 collection_quickplot.py \
 ```
 
 `--levels 850,500,250,100` adds 100 hPa. `--no-zonal` omits zonal
-mean diagrams, and `--include-2d` includes maps for surface/2D fields.
+mean diagrams, and `--exclude-2d` omits surface maps and line profiles.
 Use `--collections all` to choose all enabled HISTORY collections,
 and `--compare /path/to/other/experiment` (repeatable) for GEOS
 horizontal comparison plots. Omit `--execute` to produce only a plan.
@@ -48,7 +49,10 @@ collections_JJA_run/
 ```
 
 Temporary per-task work areas are deleted unless `--keep-workdirs`
-is specified, including after failures; logs are always retained.
+is specified, including after failures; logs are always retained. Even if a
+GEOS process reports a later error, any completed panels are retained and the
+task is marked `partial`. Native GEOS panel names are included in the flat
+output filenames to identify comparison datasets and plot types.
 Task-specific image directories prevent cross-task image attribution.
 
 ## Plotting
@@ -58,7 +62,15 @@ Without explicit `--compare`, horizontal maps use the local
 color key, and PNG output. This is necessary because GEOS `hcmp2`
 may refuse to plot a variable without matching comparison/verification
 resources. When `--compare` is given, horizontal panels use the installed
-`plots/hcmp/hcmp2`. Zonal means use the installed `plots/zcmp/progz`.
+`plots/hcmp/hcmp2`. Without explicit comparisons, zonal sections and latitude-profile lines use
+`model_zonal.gs`, avoiding the requirement for a comparison experiment.
+With explicit comparisons, 3D zonal products use installed
+`plots/zcmp/progz`. Individual surface fields still use the model-only
+line renderer. Where OLR:IRRAD, OLC:IRRAD, RSR:SOLAR, and RSC:SOLAR
+are enabled, `model_radiation.gs` produces a model-only four-panel
+`TOA_radz` latitude plot, following the structure of GEOS `olr_z`.
+It is not an observational comparison: use the original GEOS radiation
+workflow for that product.
 The GEOS `plots/configure` runtime selects the appropriate OpenGrADS;
 no custom GrADS module or `sdfwrite` is required.
 
