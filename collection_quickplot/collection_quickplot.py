@@ -261,7 +261,12 @@ def main(argv=None):
     levels = [s.strip() for s in a.levels.split(',') if s.strip()]
     if any(not re.fullmatch(r'[0-9]+(?:\.[0-9]+)?', x) for x in levels):
         p.error('Pressure levels must be positive numbers')
-    try:\n        dimensions = classify_fields(source, data, names)\n    except RuntimeError as exc:\n        p.error(str(exc))\n    tasks, skipped = create_tasks(data, names, levels, not a.no_zonal, a.compare, dimensions, a.include_2d)
+    try:
+        dimensions = classify_fields(source, data, names)
+    except RuntimeError as exc:
+        p.error(str(exc))
+    tasks, skipped = create_tasks(data, names, levels, not a.no_zonal,
+                                  a.compare, dimensions, a.include_2d)
     for script_name in ('plots/hcmp/hcmp2', 'plots/zcmp/progz'):
         if not (a.geosutil / script_name).is_file():
             p.error('Required GEOS plotting script missing: ' + script_name)
