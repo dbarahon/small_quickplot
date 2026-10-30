@@ -200,6 +200,9 @@ def create_tasks(data, names, levels, zonal, comparisons, dimensions,
 def task_command(task, expid, season, output, geosutil):
     """Use the legacy GEOS scripts that work with GEOS-configured OpenGrADS."""
     var, comp = task['variable'], task['component']
+    if task['kind'] == 'native_special':
+        script = Path(geosutil) / 'plots' / task['script']
+        return f'run {script} {expid} {output} no_debug {season}'
     if task['kind'] == 'native':
         exports = ' '.join(task['exports'])
         return (f'run genplot -EXPORT {exports} -NAME {var} -EXPID {expid} '
