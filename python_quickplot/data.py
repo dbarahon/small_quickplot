@@ -1,6 +1,7 @@
 """HISTORY aliases, bounded file reads, coordinate normalization and averaging."""
 from pathlib import Path
 import re
+from functools import lru_cache
 import numpy as np
 import xarray as xr
 
@@ -81,16 +82,31 @@ def select_time(a, begin, end, season):
     return a.isel(time=np.flatnonzero(mask.values))
 
 
+@lru_cache(maxsize=8192)
+def file_metadata(path):
+    """Cache time coordinates and variable names, never gridded fields."""
+    with xr.open_dataset(path) as ds:
+        time=next((d for d in ds.coords if d.lower() in ('time','valid_time')),None)
+        if time is None: raise ValueError('Time coordinate required: '+str(path))
+        return tuple(ds.data_vars), time, ds[time].load()
+
+
 def read_files(paths, alias, begin, end, season):
-    chunks=[]; origins=[]
+    chunks=[]; origins=[]; selected=[]
     for path in paths:
+        names,time,times=file_metadata(str(path))
+        actual=next((v for v in names if v.lower()==alias.lower()),None)
+        if actual is None: continue
+        ym=times.dt.year*100+times.dt.month
+        indices=np.flatnonzero(((ym>=int(begin)) & (ym<=int(end)) &
+                                times.dt.month.isin(SEASONS[season])).values)
+        if len(indices): selected.append((path,actual,time,indices))
+    print(f'READ {alias}: {len(selected)}/{len(paths)} files for {begin}–{end} {season}',flush=True)
+    for path,actual,time,indices in selected:
         with xr.open_dataset(path) as ds:
-            actual = next((v for v in ds.data_vars if v.lower()==alias.lower()), None)
-            if actual is None: continue
-            a=normalize(ds[actual])
-            a=select_time(a,begin,end,season)
-            if a.sizes['time']:
-                chunks.append(a.load()); origins.extend([str(path)]*a.sizes['time'])
+            # Subset before sorting/reindexing can materialize backend data.
+            a=normalize(ds[actual].isel({time:indices})).load()
+            chunks.append(a); origins.extend([str(path)]*a.sizes['time'])
     if not chunks: raise ValueError(f'No {alias} samples for {begin}–{end} {season}')
     a=xr.concat(chunks,dim='time',join='exact')
     times=a.time.values
@@ -129,7 +145,8 @@ class Experiment:
         descriptor = None if pattern else next((d for d in (
             self.root/col/'xdf.tabl', self.root/col/'ctl.tabl', self.root/col)
             if d.is_file()), None)
-        if col not in self.files:
+        inventory_key=(col,self.window)
+        if inventory_key not in self.files:
             import glob
             if pattern:
                 paths=sorted(glob.glob(str(self.root/pattern),recursive=True))
@@ -137,22 +154,22 @@ class Experiment:
                 text=descriptor.read_text()
                 is_netcdf=(descriptor.name=='xdf.tabl' or bool(re.search(
                     r'(?im)^\s*(?:dtype\s+(?:netcdf|hdf)|dset\s+.*\.nc)',text)))
-                paths=descriptor_files(descriptor) if is_netcdf else [str(descriptor)]
+                paths=descriptor_files(descriptor,self.window) if is_netcdf else [str(descriptor)]
             else:
                 paths=sorted(str(p) for p in (self.root/col).rglob('*')
                              if p.suffix in ('.nc','.nc4','.h5'))
             # A descriptor or explicit pattern is authoritative; do not mix streams.
-            self.files[col]=list(dict.fromkeys(str(Path(p).resolve()) for p in paths))
-        if descriptor is not None and self.files[col]==[str(descriptor.resolve())]:
-            a=select_time(normalize(binary_field(descriptor,f['alias'])),*self.window)
+            self.files[inventory_key]=list(dict.fromkeys(str(Path(p).resolve()) for p in paths))
+        if descriptor is not None and self.files[inventory_key]==[str(descriptor.resolve())]:
+            a=select_time(normalize(binary_field(descriptor,f['alias'],self.window)),*self.window)
             if not a.sizes.get('time',0): raise ValueError(f'No samples in {descriptor} for {self.window}')
         else:
-            if not self.files[col]:
+            if not self.files[inventory_key]:
                 raise FileNotFoundError(f'No files selected for {col}; descriptor={descriptor}; pattern={pattern}')
-            a=read_files(self.files[col],f['alias'],*self.window)
+            a=read_files(self.files[inventory_key],f['alias'],*self.window)
 
         self.cache[cachekey]=a
-        self.provenance[':'.join(key)]={'collection':col,'alias':f['alias'],'files':self.files[col]}
+        self.provenance[':'.join(key)]={'collection':col,'alias':f['alias'],'files':self.files[inventory_key]}
         return a
 
 
