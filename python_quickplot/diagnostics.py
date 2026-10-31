@@ -19,6 +19,7 @@ KNOWN_UNITS={**{k:'W m-2' for k in RADIATION+[('OSR','SOLAR'),('OSRCLR','SOLAR')
 
 KNOWN_UNITS.update({(v,'IRRAD'):'W m-2' for v in ('SFCDWNC','SFCDWN','SFCUP','SFCUPC','OLCC5')})
 KNOWN_UNITS.update({(v,'SOLAR'):'W m-2' for v in ('SLRSFC','SLRSF','RSRS','RSCS')})
+KNOWN_UNITS.update({(v,'MOIST'):'kg m-2 s-1' for v in ('CN_PRCP','LS_PRCP','AN_PRCP','TPREC')})
 KNOWN_UNITS.update({('LWP','MOIST'):'kg m-2',('TLWP','AGCM'):'kg m-2',('TQR','AGCM'):'kg m-2'})
 
 
@@ -29,7 +30,7 @@ def units_text(s):
 def precipitation(a):
     u=units_text(a.attrs.get('units',''))
     if u in ('kgm-2s-1','kg/m2/s','mms-1','mm/s'): fac=86400.
-    elif u in ('mm/day','mmd-1'): fac=1.
+    elif u in ('mm/day','mmd-1','mmday-1'): fac=1.
     elif u in ('m/day','md-1'): fac=1000.
     else: raise ValueError('Precipitation rate units required; cannot infer accumulation interval: '+u)
     a=a*fac; a.attrs['units']='mm/day'; return a
@@ -56,8 +57,12 @@ def calculate(source,name,preferred=None):
         # Observations usually provide total precipitation directly.
         try:
             arrays=[precipitation(field(source,k,preferred)) for k in RECIPES[name]]
-        except KeyError:
-            return precipitation(field(source,('TPREC','MOIST'),preferred))
+        except (KeyError, FileNotFoundError, ValueError) as component_error:
+            try:
+                return precipitation(field(source,('TPREC','MOIST'),preferred))
+            except (KeyError, FileNotFoundError, ValueError) as total_error:
+                raise ValueError(f'Precipitation components unavailable: {component_error}; '
+                                 f'TPREC fallback unavailable: {total_error}') from total_error
         arrays=xr.align(*arrays,join='exact'); result=sum(arrays)
         result.attrs['units']='mm/day'
     else:
