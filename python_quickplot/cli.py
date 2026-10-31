@@ -9,7 +9,7 @@ import numpy as np
 import xarray as xr
 from .data import Experiment, SEASONS, mean, paired, regrid, zonal, metrics
 from .diagnostics import RECIPES, RADIATION, calculate, compatible, supports
-from .verification import catalog
+from .verification import catalog, operational_reanalyses
 from .render import panels, precip_profile, radiation
 
 
@@ -53,8 +53,11 @@ def main(argv=None):
     if not a.no_verification:
         if not folder or not folder.is_dir(): p.error('Provide --verification-dir or --geosutil, or explicitly --no-verification')
         refs+=catalog(folder,root,(a.obs_begdate or a.begdate,a.obs_enddate or a.enddate,a.season),cfg.get('verification'),a.verification_rc)
+    if not a.no_verification:
+        refs += operational_reanalyses(root, (a.obs_begdate or a.begdate, a.obs_enddate or a.enddate, a.season),
+                                      existing=[r.name for r in refs])
     labels=[r.name for r in refs]
-    configured={r.name for r in refs if hasattr(r,'entries')}
+    configured={r.name for r in refs}
     if not a.no_verification:
         for dataset in ('MERRA-2','ERA5'):
             if dataset not in configured and not (dataset=='MERRA-2' and 'MERRA2' in configured):
@@ -83,6 +86,7 @@ def main(argv=None):
     def record_error(tag,exc,state='failed'):
         (logs/(tag+'.log')).write_text(traceback.format_exc())
         results.append(dict(task=tag,state=state,reason=str(exc))); save_summary()
+        print(f'{state.upper()}: {tag}: {exc}', flush=True)
     for col,key in tasks:
         label=':'.join(key) if isinstance(key,tuple) else key; tag=slug(col+'_'+label)
         try:
@@ -106,6 +110,8 @@ def main(argv=None):
                     except Exception as exc: record_error(rtag,exc,'unavailable')
                 continue
             raw=calculate(model,key,col); field=mean(raw)
+            description=raw.attrs.get('long_name', label)
+            display_label=f'{description} ({raw.attrs.get("units", "")})'
             modes=[('map',None)] if 'lev' not in field.dims else [('level',v) for v in levels]+([] if a.no_zonal else [('zonal',None)])
             def product(x,kind,level):
                 if kind=='level':
@@ -116,7 +122,7 @@ def main(argv=None):
                 ptag=tag+'_'+kind+(f'_{level:g}hPa' if level else '')
                 try:
                     v=product(field,kind,level)
-                    panels([v],[model.name],f'{label} {str(level)+" hPa" if level else kind}  {a.season}  {a.begdate}–{a.enddate}  n={raw.sizes["time"]}',plots/(ptag+'.png'),section=kind=='zonal',precip=key=='precip',coastlines=a.coastlines)
+                    panels([v],[model.name],f'{display_label} {str(level)+" hPa" if level else kind}  {a.season}  {a.begdate}–{a.enddate}  n={raw.sizes["time"]}',plots/(ptag+'.png'),section=kind=='zonal',precip=key=='precip',coastlines=a.coastlines)
                     results.append(dict(task=ptag,state='ok',samples=raw.sizes['time']))
                     if a.save_fields: v.to_dataset(name='model').to_netcdf(a.output/(ptag+'.nc'))
                 except Exception as exc: record_error(ptag,exc); continue
@@ -133,7 +139,7 @@ def main(argv=None):
                             lv=product(lm,kind,level); rv=regrid(product(rm,kind,level),lv)
                         lv,rv=xr.align(lv,rv,join='exact'); delta=lv-rv; delta.attrs=lv.attrs.copy()
                         stat=metrics(lv,rv) if kind!='zonal' else None
-                        panels([lv,rv,delta],[model.name,ref.name,'Model − reference'],f'{label} {str(level)+" hPa" if level else kind} {a.season}; {len(months)} common months',plots/(rtag+'.png'),section=kind=='zonal',precip=key=='precip',coastlines=a.coastlines)
+                        panels([lv,rv,delta],[model.name,ref.name,'Model − reference'],f'{display_label} {str(level)+" hPa" if level else kind} {a.season}; {len(months)} common months',plots/(rtag+'.png'),section=kind=='zonal',precip=key=='precip',coastlines=a.coastlines)
                         results.append(dict(task=rtag,state='ok',months=months,metrics=stat))
                         if a.save_fields: xr.Dataset(dict(model=lv,reference=rv,difference=delta)).to_netcdf(a.output/(rtag+'.nc'))
                         if key=='precip': precip_profile([(model.name,lv),(ref.name,rv)],plots/(rtag+'_profile.png'),f'Precipitation {a.season}')
