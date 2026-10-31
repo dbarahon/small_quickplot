@@ -84,7 +84,9 @@ def compatible(a,b):
     ua,ub=synonyms.get(ua,ua),synonyms.get(ub,ub)
     if not ua or not ub: raise ValueError('Comparison requires known units on both fields; set manifest units')
     if ua==ub: return b
-    if (ua,ub)==('pa','hpa'): b=b*100
+    if ua in ('kgm-2s-1','kg/m2/s') and ub=='mm/day': b=b/86400
+    elif ua=='mm/day' and ub in ('kgm-2s-1','kg/m2/s'): b=b*86400
+    elif (ua,ub)==('pa','hpa'): b=b*100
     elif (ua,ub)==('hpa','pa'): b=b/100
     elif (ua,ub)==('1','%'): b=b/100
     elif (ua,ub)==('%','1'): b=b*100
