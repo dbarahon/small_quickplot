@@ -47,17 +47,19 @@ def descriptor_files(path):
     return sorted(glob.glob(pattern))
 
 
-def binary_field(path, variable):
+def binary_field(path, variable, window=None):
     """Regular GrADS float32 binary grids, monthly/daily/hourly TDEF.
 
     Unsupported layouts fail explicitly rather than guessing record offsets.
     """
     path=Path(path); text=path.read_text(); lines=[s.strip() for s in text.splitlines() if s.strip() and not s.lstrip().startswith('*')]
     directives={s.split()[0].lower():s.split()[1:] for s in lines}
-    opts=directives.get('options',[])
+    opts=[v.lower() for v in directives.get('options',[])+directives.get('format',[])]
+    fileheader=int(directives.get('fileheader',['0'])[0])
+    if fileheader<0: raise ValueError('Negative FILEHEADER')
     unsupported=set(opts)-{'little_endian','big_endian','byteswapped','yrev','zrev','template'}
     if directives.get('dtype',['binary'])[0].lower()!='binary': raise ValueError('Only raw binary CTL data supported')
-    if unsupported or any(k in directives for k in ('pdef','fileheader','theader','xyheader','trailer')):
+    if unsupported or ('pdef' in directives or any(int(directives.get(k,['0'])[0])!=0 for k in ('theader','xyheader','trailer'))):
         raise ValueError('Unsupported binary layout/options in '+str(path)+': '+str(unsupported)+'; directives: '+str({k:directives[k] for k in ('dtype','pdef','fileheader','theader','xyheader','trailer') if k in directives}))
     def axis(name):
         p=directives[name+'def']; n=int(p[0])
@@ -82,6 +84,14 @@ def binary_field(path, variable):
     if not inc: raise ValueError('Unsupported time increment')
     offset=pd.DateOffset(**{dict(mo='months',yr='years',dy='days',hr='hours',mn='minutes')[inc[2]]:int(inc[1])})
     times=pd.DatetimeIndex([dt+i*offset for i in range(int(td[0]))])
+    if window is not None:
+        from .data import SEASONS
+        begin,end,season=window
+        wanted=(times.year*100+times.month>=int(begin)) & (times.year*100+times.month<=int(end)) & np.isin(times.month,SEASONS[season])
+        if not wanted.any():
+            raise ValueError(f'No verification time overlap: requested {begin}–{end} {season}; descriptor covers {times[0]:%Y-%m}–{times[-1]:%Y-%m}: {path}')
+    else:
+        wanted=np.ones(len(times),dtype=bool)
     vi=next(i for i,s in enumerate(lines) if s.lower().startswith('vars '))
     variables=[s.split() for s in lines[vi+1:vi+1+int(lines[vi].split()[1])]]
     names=[v[0].lower() for v in variables]
@@ -102,10 +112,11 @@ def binary_field(path, variable):
         groups.setdefault(filename,[]).append(i)
     data=np.full((len(times),nz,len(y),len(x)),np.nan,dtype='float32')
     for filename,indices in groups.items():
+        if not wanted[indices].any(): continue
         if not Path(filename).is_file(): continue
-        expected=len(indices)*record*4
-        if Path(filename).stat().st_size!=expected: raise ValueError('Binary file size does not match descriptor: '+filename)
-        raw=np.memmap(filename,dtype=dtype,mode='r',shape=(len(indices),record))
+        expected=fileheader+len(indices)*record*4
+        if Path(filename).stat().st_size!=expected: raise ValueError(f'Binary file size does not match descriptor: {filename}; expected {expected} bytes, found {Path(filename).stat().st_size}; header={fileheader}, records={len(indices)}')
+        raw=np.memmap(filename,dtype=dtype,mode='r',offset=fileheader,shape=(len(indices),record))
         data[indices]=raw[:,skip:skip+nz*len(y)*len(x)].reshape(len(indices),nz,len(y),len(x))
         del raw
     undef=float(directives['undef'][0]); data[np.isclose(data,undef,rtol=1e-6,atol=0)]=np.nan
@@ -125,7 +136,7 @@ class Observation:
         if key not in self.entries: raise KeyError(':'.join(key))
         e=self.entries[key]; path=Path(e['path'])
         if e.get('filetype','').upper()=='BIN' or path.suffix.lower()=='.ctl':
-            a=select_time(normalize(binary_field(path,e['variable'])),*self.window)
+            a=select_time(normalize(binary_field(path,e['variable'],self.window)),*self.window)
         else:
             files=descriptor_files(path) if path.suffix.lower() in ('.tabl','.ddf') else sorted(glob.glob(str(path)))
             a=read_files(files,e['variable'],*self.window)
@@ -135,7 +146,8 @@ class Observation:
         if e.get('filetype') and key in KNOWN_UNITS: a.attrs['units']=KNOWN_UNITS[key]
         if e.get('units'): a.attrs['units']=e['units']
         # Native resource scales define precipitation in mm/day, unlike model kg m-2 s-1.
-        if key==('TPREC','MOIST') and not e.get('units'): a.attrs['units']='mm/day'
+        if e.get('filetype') and key in {('TPREC','MOIST'),('CN_PRCP','MOIST'),('LS_PRCP','MOIST')} and not e.get('units'):
+            a.attrs['units']='mm/day'
         self.cache[key]=a; self.provenance[':'.join(key)]=e
         return a
 
