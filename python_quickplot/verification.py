@@ -58,7 +58,7 @@ def binary_field(path, variable):
     unsupported=set(opts)-{'little_endian','big_endian','byteswapped','yrev','zrev','template'}
     if directives.get('dtype',['binary'])[0].lower()!='binary': raise ValueError('Only raw binary CTL data supported')
     if unsupported or any(k in directives for k in ('pdef','fileheader','theader','xyheader','trailer')):
-        raise ValueError('Unsupported binary layout/options in '+str(path)+': '+str(unsupported))
+        raise ValueError('Unsupported binary layout/options in '+str(path)+': '+str(unsupported)+'; directives: '+str({k:directives[k] for k in ('dtype','pdef','fileheader','theader','xyheader','trailer') if k in directives}))
     def axis(name):
         p=directives[name+'def']; n=int(p[0])
         if p[1].lower()=='linear': return float(p[2])+np.arange(n)*float(p[3])
@@ -74,6 +74,7 @@ def binary_field(path, variable):
     td=directives['tdef']
     if td[1].lower()!='linear': raise ValueError('TDEF must be linear')
     start=td[2].lower()
+    if re.fullmatch(r'[a-z]{3}\d{4}',start): start='01'+start
     m=re.fullmatch(r'(?:(\d{1,2})(?::(\d{2}))?z)?(\d{1,2})([a-z]{3})(\d{4})',start)
     if not m: raise ValueError('Unsupported TDEF date: '+start)
     dt=pd.to_datetime(f'{m[3]}{m[4]}{m[5]}',format='%d%b%Y')+pd.Timedelta(hours=int(m[1] or 0),minutes=int(m[2] or 0))
