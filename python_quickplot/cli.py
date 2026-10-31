@@ -9,7 +9,7 @@ import numpy as np
 import xarray as xr
 from .data import Experiment, SEASONS, mean, paired, regrid, zonal, metrics
 from .diagnostics import RECIPES, RADIATION, calculate, compatible, supports
-from .verification import catalog, operational_reanalyses
+from .verification import catalog, operational_reanalyses, comparison_climatology
 from .render import panels, precip_profile, radiation, configure
 from .special import special_products
 from .unify_plots import unify
@@ -121,9 +121,10 @@ def main(argv=None):
                         other=xr.align(*(calculate(ref,k,col) for k in RADIATION),join='exact')
                         left=[]; right=[]; common=None
                         for x,y in zip(base,other):
-                            x,y,months=paired(x,compatible(x,y),ref.climatology); common=months
+                            use_clim=comparison_climatology(ref,x,y)
+                            x,y,months=paired(x,compatible(x,y),use_clim); common=months
                             left.append(mean(x)); right.append(mean(y))
-                        radiation([(model.name,left),(ref.name,right)],plots/(rtag+'.png'),f'TOA radiation {a.season}; {len(common)} common months')
+                        radiation([(model.name,left),(ref.name,right)],plots/(rtag+'.png'),f'TOA radiation {a.season}; {len(common)} common months' + (' (climatology)' if use_clim else ''))
                         results.append(dict(task=rtag,state='ok',months=common))
                     except Exception as exc: record_error(rtag,exc,'unavailable')
                 continue
@@ -149,7 +150,9 @@ def main(argv=None):
                     rtag=ptag+'_vs_'+slug(ref.name)
                     try:
                         rr=calculate(ref,key,col); rr=compatible(raw,rr)
-                        left,right,months=paired(raw,rr,ref.climatology)
+                        use_clim=comparison_climatology(ref,raw,rr)
+                        reference_period=rr.time.dt.strftime('%Y%m').values
+                        left,right,months=paired(raw,rr,use_clim)
                         lm,rm=mean(left),mean(right)
                         if kind=='zonal':
                             rm=regrid(rm,lm).interp(lev=lm.lev); lv,rv=zonal(lm),zonal(rm)
@@ -157,8 +160,8 @@ def main(argv=None):
                             lv=product(lm,kind,level); rv=regrid(product(rm,kind,level),lv)
                         lv,rv=xr.align(lv,rv,join='exact'); delta=lv-rv; delta.attrs=lv.attrs.copy()
                         stat=metrics(lv,rv) if kind!='zonal' else None
-                        panels([lv,rv,delta],[model.name,ref.name,'Model − reference'],f'{display_label} {str(level)+" hPa" if level else kind} {a.season}; {len(months)} common months' + (f' (climatology: model {a.begdate}–{a.enddate}; reference {ref.window[0]}–{ref.window[1]})' if ref.climatology else ''),plots/(rtag+'.png'),section=kind=='zonal',precip=key=='precip',coastlines=a.coastlines)
-                        results.append(dict(task=rtag,state='ok',months=months,metrics=stat))
+                        panels([lv,rv,delta],[model.name,ref.name,'Model − reference'],f'{display_label} {str(level)+" hPa" if level else kind} {a.season}; {len(months)} common months' + (f' (climatology: model {a.begdate}–{a.enddate}; reference {reference_period[0]}–{reference_period[-1]})' if use_clim else ''),plots/(rtag+'.png'),section=kind=='zonal',precip=key=='precip',coastlines=a.coastlines)
+                        results.append(dict(task=rtag,state='ok',months=months,metrics=stat,climatology=use_clim,reference_period=[str(reference_period[0]),str(reference_period[-1])]))
                         if a.save_fields: xr.Dataset(dict(model=lv,reference=rv,difference=delta)).to_netcdf(a.output/(rtag+'.nc'))
                         if key=='precip': precip_profile([(model.name,lv),(ref.name,rv)],plots/(rtag+'_profile.png'),f'Precipitation {a.season}')
                     except Exception as exc: record_error(rtag,exc,'unavailable')
