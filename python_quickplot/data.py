@@ -123,7 +123,22 @@ class Experiment:
             pattern=self.patterns.get(col)
             self.files[col]=sorted(glob.glob(str(self.root/pattern),recursive=True)) if pattern else sorted(
                 str(p) for p in (self.root/col).rglob('*') if p.suffix in ('.nc','.nc4','.h5'))
-        a=read_files(self.files[col],f['alias'],*self.window)
+        if self.files[col]:
+            a=read_files(self.files[col],f['alias'],*self.window)
+        else:
+            # Operational reanalyses can expose descriptors instead of local NC files.
+            from .verification import descriptor_files, binary_field
+            descriptor = next((d for d in (self.root/col/'xdf.tabl', self.root/col/'ctl.tabl',
+                              self.root/col) if d.is_file()), None)
+            if descriptor is None:
+                raise FileNotFoundError(f'No NetCDF files or xdf.tabl/ctl.tabl for {col} under {self.root}')
+            text = descriptor.read_text()
+            if re.search(r'(?im)^\s*(?:dtype\s+(?:netcdf|hdf)|dset\s+.*\.nc)', text) or descriptor.name == 'xdf.tabl':
+                a=read_files(descriptor_files(descriptor),f['alias'],*self.window)
+            else:
+                a=select_time(normalize(binary_field(descriptor,f['alias'])),*self.window)
+                if not a.sizes.get('time',0): raise ValueError(f'No samples in {descriptor} for {self.window}')
+
         self.cache[cachekey]=a
         self.provenance[':'.join(key)]={'collection':col,'alias':f['alias'],'files':self.files[col]}
         return a
