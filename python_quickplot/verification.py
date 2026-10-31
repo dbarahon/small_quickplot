@@ -155,3 +155,23 @@ def catalog(folder,root,window,manifest=None,extra_rcs=()):
         if name in sources: sources[name].entries.update(parsed)
         else: sources[name]=Observation(name,parsed,window)
     return list(sources.values())
+
+
+def operational_reanalyses(root, window, existing=()):
+    """QuickPlot's cmpops directories, read as experiments, not extra RC catalogs."""
+    from .data import Experiment
+    sources = []
+    for directory, name in [('MERRA2_MEANS', 'MERRA-2'), ('ERA5_Monthly', 'ERA5')]:
+        if name in existing or (name == 'MERRA-2' and 'MERRA2' in existing):
+            continue
+        path = Path(root) / directory
+        if not path.is_dir():
+            print(f'NOTICE: {name} comparison directory missing: {path}', flush=True)
+            continue
+        try:
+            source = Experiment(path, *window)
+            source.name = name
+            sources.append(source)
+        except (OSError, ValueError) as exc:
+            print(f'NOTICE: Cannot initialize {name} at {path}: {exc}', flush=True)
+    return sources
