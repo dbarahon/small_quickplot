@@ -18,9 +18,7 @@ set save_fields = 0
 set dpi = 150                   # Increase to 300 for publication/export.
 set difference_percentile = 95   # 100 = full range; smaller emphasizes differences.
 set special_plots = 1           # Profiles, QBO and vortex (needs Sep-Apr data).
-set unify_plots = ""             # Destination directory; empty keeps per-job plots.
-set launch_mode = submit         # submit or unify (move already completed plots)
-set completed_runs = ( )         # For unify mode: ( /path/to/run1 /path/to/run2 )
+set unify_folder = "$experiment/pyPlots-CLIM"  # Empty disables collection.
 set coastlines = ""              # Optional offline .shp file.
 set isccp_begdate = ""           # Empty uses model dates; inspect logs if unavailable.
 set isccp_enddate = ""
@@ -32,13 +30,10 @@ set srb_climatology = 1          # Explicit older-period climatology for SRB.
 # Example: ( --climatology --compare-begdate 200806 --compare-enddate 200808 )
 set extra_options = ()
 
-if ( "$launch_mode" == "unify" ) then
-    if ( "$unify_plots" == "" || $#completed_runs == 0 ) then
-        echo "Set unify_plots and completed_runs for unify mode."
-        exit 2
-    endif
-    python3 unify_plots.py --destination "$unify_plots" $completed_runs:q
-    exit $status
+# Collect existing seasonal plots locally; no Slurm job or replotting needed.
+if ( "$unify_folder" != "" ) then
+    python3 unify_plots.py --experiment "$experiment" --season "$season" --destination "$unify_folder"
+    if ( $status != 0 ) exit 1
 endif
 if ( ! $?GEOSUTIL ) then
     echo "Set GEOSUTIL to your GEOS install directory first."
@@ -59,7 +54,7 @@ endif
 
 set options = ( --dpi "$dpi" --difference-percentile "$difference_percentile" )
 if ( $special_plots == 1 ) set options = ( $options:q --special-plots )
-if ( "$unify_plots" != "" ) set options = ( $options:q --unify-plots "$unify_plots" )
+if ( "$unify_folder" != "" ) set options = ( $options:q --unify-plots "$unify_folder" )
 if ( "$coastlines" != "" ) set options = ( $options:q --coastlines "$coastlines" )
 if ( "$isccp_begdate" != "" && "$isccp_enddate" != "" ) then
     set options = ( $options:q --verification-period "ISCCP:${isccp_begdate}:${isccp_enddate}" )
