@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import re
 import traceback
+import time
 import numpy as np
 import xarray as xr
 from .data import Experiment, SEASONS, mean, paired, regrid, zonal, metrics
@@ -105,8 +106,10 @@ def main(argv=None):
         (logs/(tag+'.log')).write_text(traceback.format_exc())
         results.append(dict(task=tag,state=state,reason=str(exc))); save_summary()
         print(f'{state.upper()}: {tag}: {exc}', flush=True)
-    for col,key in tasks:
+    for task_index,(col,key) in enumerate(tasks,1):
         label=':'.join(key) if isinstance(key,tuple) else key; tag=slug(col+'_'+label)
+        started=time.monotonic()
+        print(f'START [{task_index}/{len(tasks)}] {tag}',flush=True)
         try:
             if key=='toa_radz':
                 base=xr.align(*(calculate(model,k,col) for k in RADIATION),join='exact')
@@ -117,6 +120,7 @@ def main(argv=None):
                 for ref in refs:
                     if not supports(ref,key): continue
                     rtag=tag+'_vs_'+slug(ref.name)
+                    print(f'COMPARE {rtag}',flush=True)
                     try:
                         other=xr.align(*(calculate(ref,k,col) for k in RADIATION),join='exact')
                         left=[]; right=[]; common=None
@@ -148,6 +152,7 @@ def main(argv=None):
                 for ref in refs:
                     if not supports(ref,key): continue
                     rtag=ptag+'_vs_'+slug(ref.name)
+                    print(f'COMPARE {rtag}',flush=True)
                     try:
                         rr=calculate(ref,key,col); rr=compatible(raw,rr)
                         use_clim=comparison_climatology(ref,raw,rr)
@@ -172,6 +177,7 @@ def main(argv=None):
             model.cache.clear()
             for ref in refs: ref.cache.clear()
             save_summary()
+            print(f'FINISHED [{task_index}/{len(tasks)}] {tag}: {time.monotonic()-started:.1f}s',flush=True)
     if a.special_plots:
         special_products(model,refs,names,a.variables,plots,a.season,results,record_error)
         save_summary()
