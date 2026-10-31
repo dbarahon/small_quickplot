@@ -8,6 +8,14 @@ from matplotlib.ticker import ScalarFormatter, FuncFormatter, MaxNLocator, NullF
 from .data import zonal
 
 
+DPI = 150
+DIFFERENCE_PERCENTILE = 95.0
+
+def configure(dpi=150, difference_percentile=95):
+    global DPI, DIFFERENCE_PERCENTILE
+    DPI = dpi
+    DIFFERENCE_PERCENTILE = difference_percentile
+
 def latlabel(v,pos=None): return 'EQ' if abs(v)<1e-8 else f'{abs(v):g}'+('N' if v>0 else 'S')
 
 
@@ -17,7 +25,7 @@ def levels(arrays,difference=False,precip=False):
     if not len(vals): raise ValueError('All cells undefined')
     lo,hi=float(vals.min()),float(vals.max())
     if difference:
-        hi=max(abs(lo),abs(hi),1e-12); return np.linspace(-hi,hi,17)
+        hi=max(float(np.percentile(np.abs(vals),DIFFERENCE_PERCENTILE)),1e-12); return np.linspace(-hi,hi,17)
     if hi==lo: lo-=max(abs(lo)*.01,.01); hi+=max(abs(hi)*.01,.01)
     return MaxNLocator(nbins=18).tick_values(lo,hi)
 
@@ -121,8 +129,9 @@ def panels(arrays,labels,title,path,section=False,precip=False,coastlines=None):
         cb.ax.tick_params(labelsize=7)
         cb.formatter=ScalarFormatter(useMathText=True); cb.formatter.set_powerlimits((-3,4)); cb.update_ticks()
         if not comparison: cb.set_label(units,fontsize=9)
+        else: cb.set_label(f'Difference ({units}); symmetric {DIFFERENCE_PERCENTILE:g}th percentile range; extremes saturated',fontsize=7)
         fig.suptitle(title,fontsize=11,y=.985,wrap=True)
-        fig.savefig(path,dpi=150)
+        fig.savefig(path,dpi=DPI)
     finally: plt.close(fig)
 
 
@@ -131,7 +140,7 @@ def precip_profile(series,path,title):
     try:
         for label,a in series: ax.plot(a.lat,zonal(a),label=label)
         ax.set_ylabel('Precipitation (mm/day)'); ax.set_xlabel('Latitude'); ax.xaxis.set_major_formatter(FuncFormatter(latlabel))
-        ax.grid(alpha=.25); ax.legend(); ax.set_title(title); fig.savefig(path,dpi=150)
+        ax.grid(alpha=.25); ax.legend(); ax.set_title(title); fig.savefig(path,dpi=DPI)
     finally: plt.close(fig)
 
 
@@ -149,5 +158,5 @@ def radiation(series,path,title):
             axes[1,1].plot(rsr.lat,rsc-rsr,color=color,label=label)
         for ax,name in zip(axes.flat,['Outgoing Longwave Radiation','TOA LW Cloud Forcing (clear − all)','Net TOA Shortwave Radiation','TOA SW Cloud Forcing (clear − all)']):
             ax.set_title(name); ax.set_ylabel('W m$^{-2}$'); ax.set_xlabel('Latitude'); ax.xaxis.set_major_formatter(FuncFormatter(latlabel)); ax.set_xlim(-90,90); ax.set_xticks(np.arange(-90,91,30)); ax.grid(alpha=.5,linestyle=':'); ax.legend(fontsize=7,loc='upper center',bbox_to_anchor=(.5,-.18))
-        fig.suptitle(title); fig.savefig(path,dpi=150)
+        fig.suptitle(title); fig.savefig(path,dpi=DPI)
     finally: plt.close(fig)
