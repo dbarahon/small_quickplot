@@ -36,15 +36,42 @@ def rc_entries(path, root):
     return entries
 
 
-def descriptor_files(path):
+def descriptor_files(path, window=None):
     text=Path(path).read_text()
     m=re.search(r'(?im)^\s*dset\s+(.+)$',text)
     if not m: raise ValueError('Descriptor has no DSET: '+str(path))
     pattern=m[1].strip().strip('"\'')
     if pattern.startswith('^'): pattern=str(Path(path).parent/pattern[1:])
     elif not Path(pattern).is_absolute(): pattern=str(Path(path).parent/pattern)
+    template=pattern
     pattern=re.sub(r'%[a-zA-Z]\d+', '*', pattern)
-    return sorted(glob.glob(pattern))
+    paths=sorted(glob.glob(pattern))
+    if window is None or '%y4' not in template: return paths
+    # Only descriptor-declared dates are authoritative; never guess from IDs.
+    parts=re.split(r'(%[a-zA-Z]\d+)',template); seen=set(); regex=''
+    for part in parts:
+        if re.fullmatch(r'%[a-zA-Z]\d+',part):
+            name=part[1:]
+            regex += f'(?P={name})' if name in seen else f'(?P<{name}>[0-9]{{{int(name[1:])}}})'
+            seen.add(name)
+        else: regex += re.escape(part).replace(r'\*','.*').replace(r'\?','.')
+    matcher=re.compile(regex)
+    from .data import SEASONS
+    begin,end,season=window
+    selected=[]
+    for filename in paths:
+        match=matcher.fullmatch(filename)
+        if match is None:
+            selected.append(filename)
+            continue
+        year=int(match['y4'])
+        if 'm2' in seen:
+            month=int(match['m2']); ym=year*100+month
+            if int(begin)<=ym<=int(end) and month in SEASONS[season]: selected.append(filename)
+        elif int(begin)//100<=year<=int(end)//100:
+            selected.append(filename)
+    return selected
+
 
 
 def binary_field(path, variable, window=None):
@@ -144,7 +171,7 @@ class Observation:
             if is_binary:
                 a=select_time(normalize(binary_field(path,e['variable'],window)),*window)
             else:
-                files=descriptor_files(path) if path.suffix.lower() in ('.tabl','.ddf') else sorted(glob.glob(str(path)))
+                files=descriptor_files(path,window) if path.suffix.lower() in ('.tabl','.ddf') else sorted(glob.glob(str(path)))
                 a=read_files(files,e['variable'],*window)
             # Missing files / entirely undefined timesteps must not count as overlap.
             return a.dropna('time',how='all')
