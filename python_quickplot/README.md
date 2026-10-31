@@ -143,23 +143,61 @@ parsed; automatic shared levels and the fixed precipitation scale replace its
 variable-specific styling. No automatic coastline download occurs. For coastlines,
 install Cartopy and pass `--coastlines /path/to/ne_110m_coastline.shp`.
 
-## Slurm
+## Launcher and Slurm
 
-Submit from `python_quickplot/`, with your Python environment already activated
-and GEOSUTIL set. Adjust the season/date settings and Slurm resources in the script:
+Edit `launch_jja.csh`, then run `tcsh launch_jja.csh` from this directory.
+The launcher owns dates, season, collections, levels, comparison experiment and
+plot options. `gcm_python.j` is its worker; do not submit it with the old two-argument
+command. Activate your Python environment and set GEOSUTIL before submitting.
 
-```csh
-sbatch gcm_python.j /path/to/experiment geosgcm_surf \
-    --verification-root /path/to/VERIFICATION --variables precip toa_radz
-sbatch gcm_python.j /path/to/experiment geosgcm_prog \
-    --compare /path/to/reference --no-verification --variables T:DYN
-```
+- `dpi = 150`: resolution of every plot; set 300 for higher resolution.
+- `difference_percentile = 95`: symmetric limits from the 95th percentile of
+  absolute differences. Set 100 for full extrema. Values outside the range
+  saturate at the colorbar ends; saved arrays and statistics are unchanged.
+- `special_plots = 1`: adds prognostic vertical and latitude profiles, QBO and
+  vortex plots. Set 0 to disable.
+- `unify_plots = ""`: set to your desired shared folder to move each job's PNGs
+  there when finished. Names include the run directory to prevent collisions.
+  Logs and summaries remain in the original run, with `unified_plots.json`
+  recording every moved path. Existing files are never overwritten.
+- To collect older runs without resubmitting, set `launch_mode = unify`, list
+  run directories in `completed_runs`, and set `unify_plots`; run the same launcher.
+  Set `launch_mode = submit` to resume submissions.
+- `coastlines`: optional offline coastline shapefile.
+- `srb_climatology = 1`, `srb_begdate = 198307`, `srb_enddate = 200506`:
+  deliberately compare the model seasonal mean against the older SRB period.
+  Set the switch to 0 to require actual model dates instead. This affects SRB
+  only. Other observations and experiment comparisons keep their own dates.
+- ISCCP has its own optional begin/end dates and climatology switch. Empty dates
+  and switch 0 retain actual-date comparison. Binary .tabl files are recognized
+  even when an installed RC labels them HDF. Remaining missing data or unsupported
+  layouts are reported explicitly; there is no silent fallback to another period.
 
-One job processes one collection serially, with cached file inventories and
-bounded field caches. Submit separate jobs for parallel collections. Large
-multi-year 3-D fields can still require substantial memory; use monthly files and
-short validation periods first. The implementation does not yet stream seasonal
-sums or use distributed execution.
+The Slurm resource requests remain in `gcm_python.j`. One job processes one
+collection serially; separate collection jobs run in parallel.
+
+## Zonal mean prognostics
+
+The special figures follow GEOS `plots/lcmp/lplt1`, `lplt2`, and
+`plots/zcmp1/qbo` and `vortex` (v3.0.2 conventions). They use only configured
+comparison sources; historical native comparison datasets are not added.
+
+Vertical profiles are generated for T, U, V, Q and RH2, together with latitude
+profiles at two pressure levels. T uses 85S, equator and 85N with log pressure.
+U/V use fixed 30S, equator and 30N; Q uses 60S, equator and 60N; RH2 uses
+85S, equator and 85N. These fixed choices deliberately avoid the original
+extremum-following latitude selection for U/V/RH2. Reference profiles are paired
+in time with the model. Regular latitude-pressure contour sections remain linear.
+
+QBO plots use zonal wind averaged over 10S–10N and a logarithmic pressure axis.
+Vortex plots use 50–70S, 0.1–100 hPa, September–April monthly climatologies,
+with a thick zero contour and signed 15 m/s contours. Dotted zero contours of
+mean ±1 standard deviation appear only where at least two years contribute.
+Time plots load all available months between the launcher begin/end dates,
+independently of the selected map season. Missing calendar months stay blank.
+A JJA-only three-month input cannot make a vortex plot; choose a longer period
+with September–April data. No observations are extrapolated beyond their levels
+or dates, and chronological comparisons require common calendar months.
 
 ## Validation
 
