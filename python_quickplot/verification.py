@@ -139,12 +139,32 @@ class Observation:
         if path.suffix.lower() in ('.tabl','.ddf') and path.is_file():
             header=path.read_text()
             descriptor_binary=bool(re.search(r'(?im)^\s*vars\s+\d+',header)) and not bool(re.search(r'(?im)^\s*(?:dtype\s+(?:netcdf|hdf)|dset\s+.*\.(?:nc|nc4|hdf|h5)(?:\s|$))',header))
-        if descriptor_binary or e.get('filetype','').upper()=='BIN' or path.suffix.lower()=='.ctl':
-            a=select_time(normalize(binary_field(path,e['variable'],self.window)),*self.window)
-        else:
-            files=descriptor_files(path) if path.suffix.lower() in ('.tabl','.ddf') else sorted(glob.glob(str(path)))
-            a=read_files(files,e['variable'],*self.window)
-        if not a.sizes.get('time',0) or not bool(a.notnull().any()): raise ValueError('No verification data: '+str(path))
+        is_binary=descriptor_binary or e.get('filetype','').upper()=='BIN' or path.suffix.lower()=='.ctl'
+        def read(window):
+            if is_binary:
+                a=select_time(normalize(binary_field(path,e['variable'],window)),*window)
+            else:
+                files=descriptor_files(path) if path.suffix.lower() in ('.tabl','.ddf') else sorted(glob.glob(str(path)))
+                a=read_files(files,e['variable'],*window)
+            # Missing files / entirely undefined timesteps must not count as overlap.
+            return a.dropna('time',how='all')
+        fallback=False
+        try:
+            a=read(self.window)
+        except ValueError as exc:
+            if not (str(exc).startswith('No verification time overlap:') or
+                    str(exc).startswith(f"No {e['variable']} samples for ")):
+                raise
+            a=None
+        if a is None or not a.sizes.get('time',0):
+            a=read(('000101','999912',self.window[2]))
+            fallback=True
+        if not a.sizes.get('time',0):
+            raise ValueError('No verification data: '+str(path))
+        period=[str(a.time.dt.strftime('%Y%m').values[0]),str(a.time.dt.strftime('%Y%m').values[-1])]
+        if fallback:
+            print(f"NOTICE: {self.name} {':'.join(key)}: using {self.window[2]} climatology "
+                  f"{period[0]}–{period[1]}; requested dates have no data",flush=True)
         attrs=a.attrs.copy(); a=a*e.get('scale',1)+e.get('offset',0); a.attrs=attrs
         from .diagnostics import KNOWN_UNITS
         if e.get('filetype') and key in KNOWN_UNITS: a.attrs['units']=KNOWN_UNITS[key]
@@ -152,7 +172,7 @@ class Observation:
         # Native resource scales define precipitation in mm/day, unlike model kg m-2 s-1.
         if e.get('filetype') and key in {('TPREC','MOIST'),('CN_PRCP','MOIST'),('LS_PRCP','MOIST')} and not e.get('units'):
             a.attrs['units']='mm/day'
-        self.cache[key]=a; self.provenance[':'.join(key)]=e
+        self.cache[key]=a; self.provenance[':'.join(key)]={**e,'climatology_fallback':fallback,'available_period':period}
         return a
 
 
@@ -192,3 +212,12 @@ def operational_reanalyses(root, window, existing=()):
         except (OSError, ValueError) as exc:
             print(f'NOTICE: Cannot initialize {name} at {path}: {exc}', flush=True)
     return sources
+
+
+def comparison_climatology(source, model, reference):
+    """Automatic calendar-month pairing is restricted to verification catalogs."""
+    if getattr(source,'climatology',False): return True
+    if not isinstance(source,Observation): return False
+    left=set((model.time.dt.year*100+model.time.dt.month).values.tolist())
+    right=set((reference.time.dt.year*100+reference.time.dt.month).values.tolist())
+    return not bool(left & right)
