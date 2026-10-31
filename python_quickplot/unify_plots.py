@@ -24,8 +24,20 @@ def unify(runs, destination):
     return moved
 
 
+def seasonal_runs(experiment, season):
+    """Discover both the existing plot/ layout and the requested plots/ layout."""
+    root=Path(experiment)
+    return sorted({run.resolve() for parent in (root/'plot',root/'plots')
+                   for run in parent.glob('python_'+season+'*') if run.is_dir()})
+
+
 if __name__=='__main__':
     import argparse
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('runs',nargs='+',type=Path); p.add_argument('--destination',required=True,type=Path)
-    a=p.parse_args(); print(f'Moved {len(unify(a.runs,a.destination))} plots')
+    p.add_argument('runs',nargs='*',type=Path)
+    p.add_argument('--experiment',type=Path); p.add_argument('--season')
+    p.add_argument('--destination',required=True,type=Path)
+    a=p.parse_args()
+    if bool(a.experiment) != bool(a.season): p.error('--experiment and --season must be used together')
+    runs=seasonal_runs(a.experiment,a.season) if a.experiment else a.runs
+    print(f'Moved {len(unify(runs,a.destination))} plots to {a.destination}')
