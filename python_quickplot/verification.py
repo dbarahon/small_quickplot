@@ -135,7 +135,11 @@ class Observation:
         if key in self.cache: return self.cache[key]
         if key not in self.entries: raise KeyError(':'.join(key))
         e=self.entries[key]; path=Path(e['path'])
-        if e.get('filetype','').upper()=='BIN' or path.suffix.lower()=='.ctl':
+        descriptor_binary=False
+        if path.suffix.lower() in ('.tabl','.ddf') and path.is_file():
+            header=path.read_text()
+            descriptor_binary=bool(re.search(r'(?im)^\s*vars\s+\d+',header)) and not bool(re.search(r'(?im)^\s*(?:dtype\s+(?:netcdf|hdf)|dset\s+.*\.(?:nc|nc4|hdf|h5)(?:\s|$))',header))
+        if descriptor_binary or e.get('filetype','').upper()=='BIN' or path.suffix.lower()=='.ctl':
             a=select_time(normalize(binary_field(path,e['variable'],self.window)),*self.window)
         else:
             files=descriptor_files(path) if path.suffix.lower() in ('.tabl','.ddf') else sorted(glob.glob(str(path)))
