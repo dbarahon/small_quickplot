@@ -82,18 +82,24 @@ def select_time(a, begin, end, season):
 
 
 def read_files(paths, alias, begin, end, season):
-    chunks=[]
+    chunks=[]; origins=[]
     for path in paths:
         with xr.open_dataset(path) as ds:
             actual = next((v for v in ds.data_vars if v.lower()==alias.lower()), None)
             if actual is None: continue
             a=normalize(ds[actual])
             a=select_time(a,begin,end,season)
-            if a.sizes['time']: chunks.append(a.load())
+            if a.sizes['time']:
+                chunks.append(a.load()); origins.extend([str(path)]*a.sizes['time'])
     if not chunks: raise ValueError(f'No {alias} samples for {begin}–{end} {season}')
-    a=xr.concat(chunks,dim='time',join='exact').sortby('time')
-    if len(np.unique(a.time))!=a.sizes['time']:
-        raise ValueError(f'Duplicate timestamps for {alias}; narrow the input file pattern')
+    a=xr.concat(chunks,dim='time',join='exact')
+    times=a.time.values
+    unique, counts=np.unique(times,return_counts=True)
+    if np.any(counts>1):
+        duplicate=unique[counts>1][0]
+        files=sorted(set(origins[i] for i in np.flatnonzero(times==duplicate)))
+        raise ValueError(f'Duplicate timestamps for {alias} at {duplicate}; conflicting files: {files}. Select one stream with file_patterns or xdf.tabl')
+    a=a.sortby('time')
     return a
 
 
@@ -116,28 +122,34 @@ class Experiment:
         candidates.sort(key=lambda item: (item[0]!=preferred,item[0]!='geosgcm_prog'))
         if not candidates: raise KeyError(':'.join(key))
         col,f=candidates[0]
-        if f['operation'] not in (None,'','mean','average'):
+        if (f['operation'] or '').lower() not in ('','mean','average','max','min','sum','instantaneous'):
             raise ValueError('Unsupported HISTORY operation: '+str(f['operation']))
+        from .verification import descriptor_files, binary_field
+        pattern=self.patterns.get(col)
+        descriptor = None if pattern else next((d for d in (
+            self.root/col/'xdf.tabl', self.root/col/'ctl.tabl', self.root/col)
+            if d.is_file()), None)
         if col not in self.files:
             import glob
-            pattern=self.patterns.get(col)
-            self.files[col]=sorted(glob.glob(str(self.root/pattern),recursive=True)) if pattern else sorted(
-                str(p) for p in (self.root/col).rglob('*') if p.suffix in ('.nc','.nc4','.h5'))
-        if self.files[col]:
-            a=read_files(self.files[col],f['alias'],*self.window)
-        else:
-            # Operational reanalyses can expose descriptors instead of local NC files.
-            from .verification import descriptor_files, binary_field
-            descriptor = next((d for d in (self.root/col/'xdf.tabl', self.root/col/'ctl.tabl',
-                              self.root/col) if d.is_file()), None)
-            if descriptor is None:
-                raise FileNotFoundError(f'No NetCDF files or xdf.tabl/ctl.tabl for {col} under {self.root}')
-            text = descriptor.read_text()
-            if re.search(r'(?im)^\s*(?:dtype\s+(?:netcdf|hdf)|dset\s+.*\.nc)', text) or descriptor.name == 'xdf.tabl':
-                a=read_files(descriptor_files(descriptor),f['alias'],*self.window)
+            if pattern:
+                paths=sorted(glob.glob(str(self.root/pattern),recursive=True))
+            elif descriptor is not None:
+                text=descriptor.read_text()
+                is_netcdf=(descriptor.name=='xdf.tabl' or bool(re.search(
+                    r'(?im)^\s*(?:dtype\s+(?:netcdf|hdf)|dset\s+.*\.nc)',text)))
+                paths=descriptor_files(descriptor) if is_netcdf else [str(descriptor)]
             else:
-                a=select_time(normalize(binary_field(descriptor,f['alias'])),*self.window)
-                if not a.sizes.get('time',0): raise ValueError(f'No samples in {descriptor} for {self.window}')
+                paths=sorted(str(p) for p in (self.root/col).rglob('*')
+                             if p.suffix in ('.nc','.nc4','.h5'))
+            # A descriptor or explicit pattern is authoritative; do not mix streams.
+            self.files[col]=list(dict.fromkeys(str(Path(p).resolve()) for p in paths))
+        if descriptor is not None and self.files[col]==[str(descriptor.resolve())]:
+            a=select_time(normalize(binary_field(descriptor,f['alias'])),*self.window)
+            if not a.sizes.get('time',0): raise ValueError(f'No samples in {descriptor} for {self.window}')
+        else:
+            if not self.files[col]:
+                raise FileNotFoundError(f'No files selected for {col}; descriptor={descriptor}; pattern={pattern}')
+            a=read_files(self.files[col],f['alias'],*self.window)
 
         self.cache[cachekey]=a
         self.provenance[':'.join(key)]={'collection':col,'alias':f['alias'],'files':self.files[col]}
