@@ -10,7 +10,9 @@ import xarray as xr
 from .data import Experiment, SEASONS, mean, paired, regrid, zonal, metrics
 from .diagnostics import RECIPES, RADIATION, calculate, compatible, supports
 from .verification import catalog, operational_reanalyses
-from .render import panels, precip_profile, radiation
+from .render import panels, precip_profile, radiation, configure
+from .special import special_products
+from .unify_plots import unify
 
 
 def slug(text): return re.sub(r'[^A-Za-z0-9_.-]+','_',str(text))
@@ -33,11 +35,19 @@ def parser():
     p.add_argument('--obs-begdate'); p.add_argument('--obs-enddate')
     p.add_argument('--coastlines',type=Path,help='Offline Natural Earth line shapefile (requires Cartopy)')
     p.add_argument('--save-fields',action='store_true'); p.add_argument('--output',type=Path,required=True)
+    p.add_argument('--dpi',type=int,default=150)
+    p.add_argument('--difference-percentile',type=float,default=95)
+    p.add_argument('--unify-plots',type=Path)
+    p.add_argument('--special-plots',action='store_true')
+    p.add_argument('--verification-period',action='append',default=[],metavar='NAME:YYYYMM:YYYYMM')
+    p.add_argument('--verification-climatology',action='append',default=[],metavar='NAME')
     p.add_argument('--execute',action='store_true'); return p
 
 
 def main(argv=None):
     p=parser(); a=p.parse_args(argv)
+    if a.dpi<=0 or not 0<a.difference_percentile<=100: p.error('DPI must be positive and difference percentile in (0,100]')
+    configure(a.dpi,a.difference_percentile)
     for date in (a.begdate,a.enddate,a.obs_begdate,a.obs_enddate,a.compare_begdate,a.compare_enddate):
         if date and (not re.fullmatch(r'\d{6}',date) or not 1<=int(date[-2:])<=12): p.error('Dates must be YYYYMM')
     if a.begdate>a.enddate: p.error('begdate must not exceed enddate')
@@ -56,6 +66,14 @@ def main(argv=None):
     if not a.no_verification:
         refs += operational_reanalyses(root, (a.obs_begdate or a.begdate, a.obs_enddate or a.enddate, a.season),
                                       existing=[r.name for r in refs])
+    for spec in a.verification_period:
+        parts=spec.split(':')
+        if len(parts)!=3 or any(not re.fullmatch(r'\d{6}',d) or not 1<=int(d[-2:])<=12 for d in parts[1:]) or parts[1]>parts[2]:
+            p.error('Verification period must be NAME:YYYYMM:YYYYMM')
+        for ref in refs:
+            if ref.name==parts[0] and hasattr(ref,'entries'): ref.window=(parts[1],parts[2],a.season)
+    for ref in refs:
+        ref.climatology=a.climatology or (hasattr(ref,'entries') and ref.name in a.verification_climatology)
     labels=[r.name for r in refs]
     configured={r.name for r in refs}
     if not a.no_verification:
@@ -103,7 +121,7 @@ def main(argv=None):
                         other=xr.align(*(calculate(ref,k,col) for k in RADIATION),join='exact')
                         left=[]; right=[]; common=None
                         for x,y in zip(base,other):
-                            x,y,months=paired(x,compatible(x,y),a.climatology); common=months
+                            x,y,months=paired(x,compatible(x,y),ref.climatology); common=months
                             left.append(mean(x)); right.append(mean(y))
                         radiation([(model.name,left),(ref.name,right)],plots/(rtag+'.png'),f'TOA radiation {a.season}; {len(common)} common months')
                         results.append(dict(task=rtag,state='ok',months=common))
@@ -131,7 +149,7 @@ def main(argv=None):
                     rtag=ptag+'_vs_'+slug(ref.name)
                     try:
                         rr=calculate(ref,key,col); rr=compatible(raw,rr)
-                        left,right,months=paired(raw,rr,a.climatology)
+                        left,right,months=paired(raw,rr,ref.climatology)
                         lm,rm=mean(left),mean(right)
                         if kind=='zonal':
                             rm=regrid(rm,lm).interp(lev=lm.lev); lv,rv=zonal(lm),zonal(rm)
@@ -139,7 +157,7 @@ def main(argv=None):
                             lv=product(lm,kind,level); rv=regrid(product(rm,kind,level),lv)
                         lv,rv=xr.align(lv,rv,join='exact'); delta=lv-rv; delta.attrs=lv.attrs.copy()
                         stat=metrics(lv,rv) if kind!='zonal' else None
-                        panels([lv,rv,delta],[model.name,ref.name,'Model − reference'],f'{display_label} {str(level)+" hPa" if level else kind} {a.season}; {len(months)} common months',plots/(rtag+'.png'),section=kind=='zonal',precip=key=='precip',coastlines=a.coastlines)
+                        panels([lv,rv,delta],[model.name,ref.name,'Model − reference'],f'{display_label} {str(level)+" hPa" if level else kind} {a.season}; {len(months)} common months' + (f' (climatology: model {a.begdate}–{a.enddate}; reference {ref.window[0]}–{ref.window[1]})' if ref.climatology else ''),plots/(rtag+'.png'),section=kind=='zonal',precip=key=='precip',coastlines=a.coastlines)
                         results.append(dict(task=rtag,state='ok',months=months,metrics=stat))
                         if a.save_fields: xr.Dataset(dict(model=lv,reference=rv,difference=delta)).to_netcdf(a.output/(rtag+'.nc'))
                         if key=='precip': precip_profile([(model.name,lv),(ref.name,rv)],plots/(rtag+'_profile.png'),f'Precipitation {a.season}')
@@ -151,6 +169,13 @@ def main(argv=None):
             model.cache.clear()
             for ref in refs: ref.cache.clear()
             save_summary()
+    if a.special_plots:
+        special_products(model,refs,names,a.variables,plots,a.season,results,record_error)
+        save_summary()
+    if a.unify_plots:
+        moved=unify([a.output],a.unify_plots)
+        (a.output/'unified_plots.json').write_text(json.dumps(moved,indent=2))
+        print(f'Moved {len(moved)} plots to {a.unify_plots}',flush=True)
     failed=sum(r['state']=='failed' for r in results); unavailable=sum(r['state']=='unavailable' for r in results)
     print(f'{len(results)-failed-unavailable} successful products, {failed} failed, {unavailable} unavailable comparisons. See summary.json.')
     return 1 if failed or unavailable else 0
