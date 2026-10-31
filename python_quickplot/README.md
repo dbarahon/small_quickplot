@@ -156,13 +156,12 @@ command. Activate your Python environment and set GEOSUTIL before submitting.
   saturate at the colorbar ends; saved arrays and statistics are unchanged.
 - `special_plots = 1`: adds prognostic vertical and latitude profiles, QBO and
   vortex plots. Set 0 to disable.
-- `unify_plots = ""`: set to your desired shared folder to move each job's PNGs
-  there when finished. Names include the run directory to prevent collisions.
-  Logs and summaries remain in the original run, with `unified_plots.json`
-  recording every moved path. Existing files are never overwritten.
-- To collect older runs without resubmitting, set `launch_mode = unify`, list
-  run directories in `completed_runs`, and set `unify_plots`; run the same launcher.
-  Set `launch_mode = submit` to resume submissions.
+- `unify_folder = "$experiment/pyPlots-CLIM"`: collect existing plots from all
+  `python_${season}*` run directories under the experiment's `plot/` or `plots/`
+  directory immediately when the launcher starts. Each new job also moves its
+  own plots there on completion. Empty disables collection. No separate mode or
+  run list is needed. Run-name prefixes prevent overwrites; logs stay in place.
+  To collect only, without submitting jobs, set `collections = ()` in the launcher.
 - `coastlines`: optional offline coastline shapefile.
 - `srb_climatology = 1`, `srb_begdate = 198307`, `srb_enddate = 200506`:
   deliberately compare the model seasonal mean against the older SRB period.
