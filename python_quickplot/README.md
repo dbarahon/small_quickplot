@@ -67,8 +67,11 @@ Sequential Fortran records, PDEF, headers/trailers, unusual templates and other
 unsupported layouts fail with a precise log message. They need conversion to
 NetCDF or an additional reader after inspecting the actual descriptor.
 
-MERRA-2 is enabled through an explicit resource file or config mapping; no archive
-path is guessed. Add `--verification-rc /path/to/VERIFICATION.MERRA2.rc` (or
+As in original QuickPlot, MERRA-2 is discovered automatically at
+`verification_root/MERRA2_MEANS` using its HISTORY.rc (or .HOMDIR) and collection
+files or xdf.tabl/ctl.tabl descriptors. ERA5_Monthly is tried the same way when
+ERA5 has no RC entry. Missing directories or metadata are printed at startup.
+Explicit resource files and config mappings take precedence. Add `--verification-rc /path/to/VERIFICATION.MERRA2.rc` (or
 `VERIFICATION.MERRA-2.rc`). Extra resource files outside the catalog are accepted
 only for MERRA-2 and ERA5. If either is unconfigured, startup prints a notice.
 
@@ -104,13 +107,13 @@ Use `--no-verification` for model-only or experiment-comparison tests.
 | `olrcf` | OLC − OLR | Same export formula |
 | `osrcf` | RSC − RSR | Same export formula (GEOS sign) |
 | `toacf` | OLC − OLR + OSRCLR − OSR | Same export formula |
-| `toa_radz` | OLR/OLC, OLC−OLR, RSR/RSC, RSR−RSC | Four-panel latitude profiles |
+| `toa_radz` | OLR/OLC, OLC−OLR, RSR/RSC, RSC−RSR | Four-panel latitude profiles |
 
 Precipitation rates are converted from kg m−2 s−1 to mm/day using 86400;
 accumulations with unknown intervals are rejected. Native observation TPREC
 resource factors produce mm/day. NetCDF overrides should explicitly specify units.
-The GEOS `osrcf` convention is clear minus all net SW; the physical SW CRE panel in
-`toa_radz` uses all minus clear net SW. Both signs are labeled deliberately.
+The GEOS `osrcf` convention is clear minus all net SW; the native-style SW cloud-forcing panel in
+`toa_radz` also uses clear minus all net SW. Both signs are labeled deliberately.
 Cloud fractions and surface radiation are compared directly through resource
 export mappings. Derived inputs may come from other enabled collections, with
 selected-collection priority, then geosgcm_prog, then HISTORY order. Missing inputs
@@ -135,7 +138,7 @@ This is **not conservative regridding**. Map bias/RMSE use latitude-band/longitu
 cell-area weights on common valid cells. Zonal comparisons have no aggregate RMSE.
 
 Figures use compact horizontal colorbars, contour overlays, readable scientific
-multipliers, latitude labels and log-pressure sections. Native `plot.rc` is not
+multipliers, latitude labels and linear-pressure sections. Native `plot.rc` is not
 parsed; automatic shared levels and the fixed precipitation scale replace its
 variable-specific styling. No automatic coastline download occurs. For coastlines,
 install Cartopy and pass `--coastlines /path/to/ne_110m_coastline.shp`.
@@ -167,3 +170,11 @@ cyclic interpolation, metrics, catalog restrictions, and complete plotting runs.
 These tests do not establish numerical equivalence with Discover's QuickPlot.
 Start with precipitation/GPCP, radiation/CERES, and one pressure-level temperature
 comparison; inspect saved NetCDF differences alongside the original outputs.
+
+Comparison figures use three stacked panels, a shared vertical model/reference
+colorbar and a horizontal difference bar. Pressure axes are linear, with 100 hPa
+ticks. Differences are absolute model minus reference; no relative-difference
+mask is applied. Side annotations identify unweighted cell statistics; the JSON
+comparison bias and RMSE retain area weighting. Coastlines use --coastlines or
+an existing Cartopy 110m coastline cache; no network download is attempted.
+Failure reasons are printed in the job output and recorded with tracebacks.
