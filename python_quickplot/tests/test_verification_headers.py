@@ -36,3 +36,35 @@ def test_era5_rc_scaled_precipitation_units(tmp_path):
     assert cp.attrs['units']=='mm/day'
     model=a.copy();model.attrs['units']='kg m-2 s-1'
     assert float(compatible(model,cp).mean())==pytest.approx(2/86400)
+
+
+def test_automatic_climatology_netcdf(tmp_path):
+    from python_quickplot.verification import comparison_climatology
+    from python_quickplot.data import paired
+    a=xr.DataArray(np.arange(12).reshape(3,2,2),dims=('time','lat','lon'),
+        coords={'time':np.array(['1989-06-01','1989-07-01','1989-08-01'],dtype='datetime64[ns]'),
+                'lat':[-45,45],'lon':[0,180]},attrs={'units':'1'})
+    a.to_dataset(name='cloud').to_netcdf(tmp_path/'cloud.nc')
+    key=('CLDTT','SOLAR')
+    obs=Observation('ISCCP',{key:dict(path=str(tmp_path/'cloud.nc'),variable='cloud')},('200906','200908','JJA'))
+    result=obs.get(key)
+    model=a.assign_coords(time=a.time.values+np.timedelta64(7305,'D'))
+    assert comparison_climatology(obs,model,result)
+    assert paired(model,result,True)[2]==[6,7,8]
+    assert obs.provenance['CLDTT:SOLAR']['climatology_fallback']
+    exact=Observation('ISCCP',obs.entries,('198906','198908','JJA'))
+    assert not comparison_climatology(exact,a,exact.get(key))
+    assert not exact.provenance['CLDTT:SOLAR']['climatology_fallback']
+
+
+def test_automatic_climatology_binary(tmp_path):
+    ctl=tmp_path/'cloud.ctl'
+    ctl.write_text('DSET ^cloud.bin\noptions big_endian\nUNDEF -999\nXDEF 2 LINEAR 0 180\nYDEF 2 LINEAR -45 90\nZDEF 1 LEVELS 0\nTDEF 3 LINEAR 01JUN1990 1mo\nVARS 1\ncloud 0 0 cloud\nENDVARS\n')
+    np.ones((3,2,2),dtype='>f4').tofile(tmp_path/'cloud.bin')
+    obs=Observation('ISCCP',{('CLDTT','SOLAR'):dict(path=str(ctl),variable='cloud')},('200906','200908','JJA'))
+    assert obs.get(('CLDTT','SOLAR')).sizes['time']==3
+    assert obs.provenance['CLDTT:SOLAR']['available_period']==['199006','199008']
+    (tmp_path/'cloud.bin').write_bytes(b'bad')
+    obs.cache.clear()
+    with pytest.raises(ValueError,match='Binary file size'):
+        obs.get(('CLDTT','SOLAR'))
