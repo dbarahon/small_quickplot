@@ -70,7 +70,8 @@ def test_automatic_climatology_binary(tmp_path):
         obs.get(('CLDTT','SOLAR'))
 
 
-def test_all_four_isccp_maps_nonoverlapping(tmp_path):
+@pytest.mark.parametrize("cloud_levels",[0,1])
+def test_all_four_isccp_maps_nonoverlapping(tmp_path,cloud_levels):
     import json
     from python_quickplot.cli import main
     model=tmp_path/'model';(model/'surf').mkdir(parents=True)
@@ -85,7 +86,7 @@ def test_all_four_isccp_maps_nonoverlapping(tmp_path):
     (tmp_path/'isccp.tabl').write_text('DSET ^isccp.bin\noptions big_endian\nUNDEF -999\n'
         'XDEF 4 LINEAR 0 90\nYDEF 3 LINEAR -60 60\nZDEF 1 LEVELS 0\n'
         'TDEF 3 LINEAR 01JUN1990 1mo\nVARS 4\n'+
-        '\n'.join(f'{v} 0 99 fraction' for v in obsvars)+'\nENDVARS\n')
+        '\n'.join(f'{v} {cloud_levels} 99 fraction' for v in obsvars)+'\nENDVARS\n')
     np.full((3,4,3,4),40,dtype='>f4').tofile(tmp_path/'isccp.bin')
     catalog=tmp_path/'rcs';catalog.mkdir()
     (catalog/'VERIFICATION.ISCCP.rc').write_text(
