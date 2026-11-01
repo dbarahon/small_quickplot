@@ -68,3 +68,53 @@ def test_automatic_climatology_binary(tmp_path):
     obs.cache.clear()
     with pytest.raises(ValueError,match='Binary file size'):
         obs.get(('CLDTT','SOLAR'))
+
+
+def test_all_four_isccp_maps_nonoverlapping(tmp_path):
+    import json
+    from python_quickplot.cli import main
+    model=tmp_path/'model';(model/'surf').mkdir(parents=True)
+    keys=['CLDLO','CLDMD','CLDHI','CLDTT']
+    obsvars=['CLDLOW','CLDMID','CLDHI','CLDTOT']
+    (model/'HISTORY.rc').write_text("COLLECTIONS:\n 'surf'\n::\nsurf.fields:\n"+
+        '\n'.join(f" '{k}', 'SOLAR'" for k in keys)+"\n::\n")
+    a=xr.DataArray(np.full((3,3,4),.5),dims=('time','lat','lon'),
+        coords={'time':np.array(['2009-06-01','2009-07-01','2009-08-01'],dtype='datetime64[ns]'),
+                'lat':[-60,0,60],'lon':[0,90,180,270]},attrs={'units':'1'})
+    xr.Dataset({k:a for k in keys}).to_netcdf(model/'surf'/'model.nc')
+    (tmp_path/'isccp.tabl').write_text('DSET ^isccp.bin\noptions big_endian\nUNDEF -999\n'
+        'XDEF 4 LINEAR 0 90\nYDEF 3 LINEAR -60 60\nZDEF 1 LEVELS 0\n'
+        'TDEF 3 LINEAR 01JUN1990 1mo\nVARS 4\n'+
+        '\n'.join(f'{v} 0 99 fraction' for v in obsvars)+'\nENDVARS\n')
+    np.full((3,4,3,4),40,dtype='>f4').tofile(tmp_path/'isccp.bin')
+    catalog=tmp_path/'rcs';catalog.mkdir()
+    (catalog/'VERIFICATION.ISCCP.rc').write_text(
+        "filename: 'VERIFICATION/isccp.tabl'\nfiletype: 'BIN'\nfields: "+
+        '\n'.join(f"'{k}', 'SOLAR', '{v}', 0.01 ," for k,v in zip(keys,obsvars))+'\n::\n')
+    out=tmp_path/'out'
+    main(['--source',str(model),'--collections','surf','--season','JJA',
+          '--begdate','200906','--enddate','200908','--verification-dir',str(catalog),
+          '--verification-root',str(tmp_path),'--output',str(out),'--dpi','40','--execute'])
+    summary=json.loads((out/'summary.json').read_text())
+    comparisons=[r for r in summary['results'] if '_vs_ISCCP' in r['task']]
+    assert len(comparisons)==4
+    assert all(r['state']=='ok' and r['climatology'] for r in comparisons)
+    assert len(list((out/'plots').glob('*_vs_ISCCP.png')))==4
+    for value in summary['provenance']['ISCCP'].values():
+        assert value['climatology_fallback']
+        assert value['available_period']==['199006','199008']
+
+
+def test_operational_reanalysis_fallback(tmp_path):
+    from python_quickplot.verification import VerificationExperiment, comparison_climatology
+    (tmp_path/'surf').mkdir()
+    (tmp_path/'HISTORY.rc').write_text("COLLECTIONS:\n 'surf'\n::\nsurf.fields:\n 'T','DYN'\n::\n")
+    a=xr.DataArray(np.ones((3,2,2))*250,dims=('time','lat','lon'),
+        coords={'time':np.array(['1990-06-01','1990-07-01','1990-08-01'],dtype='datetime64[ns]'),
+                'lat':[-45,45],'lon':[0,180]},attrs={'units':'K'})
+    a.to_dataset(name='T').to_netcdf(tmp_path/'surf'/'data.nc')
+    ref=VerificationExperiment(tmp_path,'200906','200908','JJA')
+    result=ref.get(('T','DYN'))
+    model=a.assign_coords(time=np.array(['2009-06-01','2009-07-01','2009-08-01'],dtype='datetime64[ns]'))
+    assert comparison_climatology(ref,model,result)
+    assert ref.provenance['T:DYN']['climatology_fallback']
