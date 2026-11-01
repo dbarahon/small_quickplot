@@ -20,7 +20,7 @@ set difference_percentile = 95   # 100 = full range; smaller emphasizes differen
 set special_plots = 1           # Profiles, QBO and vortex (needs Sep-Apr data).
 set unify_folder = "$experiment/pyPlots-CLIM"  # Empty disables collection.
 set coastlines = ""              # Optional offline .shp file.
-set isccp_begdate = ""           # Empty uses model dates; inspect logs if unavailable.
+set isccp_begdate = ""           # Empty tries model dates, then available seasonal climatology.
 set isccp_enddate = ""
 set isccp_climatology = 0
 set srb_begdate = 198307
@@ -40,7 +40,7 @@ if ( ! $?GEOSUTIL ) then
     exit 2
 endif
 set verification_dir = "$GEOSUTIL/plots/VERIFICATION_RCS"
-set verification_root = "$GEOSUTIL/plots/VERIFICATION"
+set verification_root = "/discover/nobackup/projects/gmao/share/gmao_ops/verification"
 # --------------------------------------------------------------------
 
 if ( $#argv != 0 ) then
