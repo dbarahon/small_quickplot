@@ -192,6 +192,14 @@ class Observation:
         if fallback:
             print(f"NOTICE: {self.name} {':'.join(key)}: using {self.window[2]} climatology "
                   f"{period[0]}–{period[1]}; requested dates have no data",flush=True)
+        # These exports are already integrated cloud fractions, not vertical
+        # profiles. Legacy ISCCP descriptors may declare one dummy Z level.
+        if key in {('CLDLO','SOLAR'),('CLDMD','SOLAR'),
+                   ('CLDHI','SOLAR'),('CLDTT','SOLAR')} and 'lev' in a.dims:
+            if a.sizes['lev'] != 1:
+                raise ValueError(f'{self.name} {key}: expected a 2-D cloud fraction, '
+                                 f"found {a.sizes['lev']} levels; check verification mapping")
+            a=a.isel(lev=0,drop=True)
         attrs=a.attrs.copy(); a=a*e.get('scale',1)+e.get('offset',0); a.attrs=attrs
         from .diagnostics import KNOWN_UNITS
         if e.get('filetype') and key in KNOWN_UNITS: a.attrs['units']=KNOWN_UNITS[key]
