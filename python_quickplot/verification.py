@@ -7,7 +7,7 @@ import re
 import numpy as np
 import pandas as pd
 import xarray as xr
-from .data import normalize, select_time, read_files
+from .data import normalize, select_time, read_files, Experiment
 
 
 def number(expression):
@@ -221,6 +221,35 @@ def catalog(folder,root,window,manifest=None,extra_rcs=()):
     return list(sources.values())
 
 
+
+class VerificationExperiment(Experiment):
+    """Operational reanalyses have the same seasonal fallback as RC datasets."""
+    def get(self,key,preferred=None):
+        import copy
+        try:
+            a=super().get(key,preferred).dropna('time',how='all')
+            if a.sizes.get('time',0): return a
+        except (ValueError,FileNotFoundError) as exc:
+            if not str(exc).startswith(('No samples in ', 'No verification time overlap:',
+                                        'No files selected for ', 'No ')):
+                raise
+            # Only availability errors qualify, not malformed data/coordinates.
+            if isinstance(exc,ValueError) and not (' samples for ' in str(exc) or
+                    str(exc).startswith(('No samples in ','No verification time overlap:'))):
+                raise
+        historical=copy.copy(self)
+        historical.window=('000101','999912',self.window[2]); historical.cache={}
+        a=Experiment.get(historical,key,preferred).dropna('time',how='all')
+        if not a.sizes.get('time',0): raise ValueError('No verification data: '+self.name)
+        period=a.time.dt.strftime('%Y%m').values
+        print(f"NOTICE: {self.name} {':'.join(key)}: using {self.window[2]} climatology "
+              f"{period[0]}–{period[-1]}; requested dates have no data",flush=True)
+        self.cache[(key,preferred)]=a
+        self.provenance[':'.join(key)].update(climatology_fallback=True,
+            available_period=[str(period[0]),str(period[-1])])
+        return a
+
+
 def operational_reanalyses(root, window, existing=()):
     """QuickPlot's cmpops directories, read as experiments, not extra RC catalogs."""
     from .data import Experiment
@@ -233,7 +262,7 @@ def operational_reanalyses(root, window, existing=()):
             print(f'NOTICE: {name} comparison directory missing: {path}', flush=True)
             continue
         try:
-            source = Experiment(path, *window)
+            source = VerificationExperiment(path, *window)
             source.name = name
             sources.append(source)
         except (OSError, ValueError) as exc:
@@ -244,7 +273,7 @@ def operational_reanalyses(root, window, existing=()):
 def comparison_climatology(source, model, reference):
     """Automatic calendar-month pairing is restricted to verification catalogs."""
     if getattr(source,'climatology',False): return True
-    if not isinstance(source,Observation): return False
+    if not isinstance(source,(Observation,VerificationExperiment)): return False
     left=set((model.time.dt.year*100+model.time.dt.month).values.tolist())
     right=set((reference.time.dt.year*100+reference.time.dt.month).values.tolist())
     return not bool(left & right)
