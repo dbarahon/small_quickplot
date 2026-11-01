@@ -1,5 +1,6 @@
 """Compact scientific maps, pressure sections and dedicated latitude profiles."""
 from pathlib import Path
+import re
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')
@@ -15,6 +16,42 @@ def configure(dpi=150, difference_percentile=95):
     global DPI, DIFFERENCE_PERCENTILE
     DPI = dpi
     DIFFERENCE_PERCENTILE = difference_percentile
+
+
+def short_title(text):
+    text=' '.join(str(text).split())
+    substitutions=[
+        (r'top[- ]of[- ](?:the[- ])?atmosphere','TOA'),
+        (r'outgoing longwave radiation','OLR'),
+        (r'longwave','LW'),(r'shortwave','SW'),
+        (r'cloud radiative effect','Cloud forcing'),
+        (r'cloud fraction','Cloud frac.'),(r'precipitation','Precip.'),
+        (r'temperature','Temp.'),(r'specific humidity','Spec. humidity'),
+        (r'relative humidity','RH'),(r'zonal mean','ZM'),
+        (r'mass fraction of',''),(r'climatology','clim.'),
+        (r'reference','ref.'),(r'common months','mo.'),
+        (r'all available months','all months')]
+    for pattern,replacement in substitutions:
+        text=re.sub(pattern,replacement,text,flags=re.IGNORECASE)
+    return ' '.join(text.split())
+
+
+def plot_title(fig,text,ax=None):
+    """Abbreviate and fit one line within the available figure/panel width."""
+    text=short_title(text)
+    artist=(fig.suptitle(text,fontsize=11,y=.985,wrap=False) if ax is None
+            else ax.set_title(text,fontsize=10,pad=5,wrap=False))
+    renderer=fig.canvas.get_renderer()
+    width=(fig.bbox.width*.96 if ax is None else ax.get_window_extent(renderer).width*.96)
+    # Keep titles readable; abbreviate unusually long names with an ellipsis.
+    for size in (11 if ax is None else 10,10,9):
+        artist.set_fontsize(size)
+        if artist.get_window_extent(renderer).width<=width: return artist
+    while len(text)>1 and artist.get_window_extent(renderer).width>width:
+        text=text[:-1].rstrip()
+        artist.set_text(text+'…')
+    return artist
+
 
 def latlabel(v,pos=None): return 'EQ' if abs(v)<1e-8 else f'{abs(v):g}'+('N' if v>0 else 'S')
 
@@ -88,7 +125,7 @@ def panels(arrays,labels,title,path,section=False,precip=False,coastlines=None):
             images.append(im)
             if section and np.nanmax(a.values)>np.nanmin(a.values):
                 ax.contour(a[x],a[y],a.values,levels=levs,colors='k',linewidths=.45)
-            ax.set_title('Difference (Top − Middle)' if diff else label,fontsize=10,pad=5)
+            plot_title(fig,'Difference (Top − Middle)' if diff else label,ax)
             ax.tick_params(labelsize=8,pad=2)
             if section:
                 ax.set_yscale('linear'); ax.set_ylim(float(a.lev.max()),float(a.lev.min()))
@@ -130,7 +167,7 @@ def panels(arrays,labels,title,path,section=False,precip=False,coastlines=None):
         cb.formatter=ScalarFormatter(useMathText=True); cb.formatter.set_powerlimits((-3,4)); cb.update_ticks()
         if not comparison: cb.set_label(units,fontsize=9)
         else: cb.set_label(f'Difference ({units}); symmetric {DIFFERENCE_PERCENTILE:g}th percentile range; extremes saturated',fontsize=7)
-        fig.suptitle(title,fontsize=11,y=.985,wrap=True)
+        plot_title(fig,title)
         fig.savefig(path,dpi=DPI)
     finally: plt.close(fig)
 
@@ -140,7 +177,7 @@ def precip_profile(series,path,title):
     try:
         for label,a in series: ax.plot(a.lat,zonal(a),label=label)
         ax.set_ylabel('Precipitation (mm/day)'); ax.set_xlabel('Latitude'); ax.xaxis.set_major_formatter(FuncFormatter(latlabel))
-        ax.grid(alpha=.25); ax.legend(); ax.set_title(title); fig.savefig(path,dpi=DPI)
+        ax.grid(alpha=.25); ax.legend(); plot_title(fig,title,ax); fig.savefig(path,dpi=DPI)
     finally: plt.close(fig)
 
 
@@ -157,6 +194,6 @@ def radiation(series,path,title):
             # Native toa_radz displays positive shortwave cloud forcing: clear minus all.
             axes[1,1].plot(rsr.lat,rsc-rsr,color=color,label=label)
         for ax,name in zip(axes.flat,['Outgoing Longwave Radiation','TOA LW Cloud Forcing (clear − all)','Net TOA Shortwave Radiation','TOA SW Cloud Forcing (clear − all)']):
-            ax.set_title(name); ax.set_ylabel('W m$^{-2}$'); ax.set_xlabel('Latitude'); ax.xaxis.set_major_formatter(FuncFormatter(latlabel)); ax.set_xlim(-90,90); ax.set_xticks(np.arange(-90,91,30)); ax.grid(alpha=.5,linestyle=':'); ax.legend(fontsize=7,loc='upper center',bbox_to_anchor=(.5,-.18))
-        fig.suptitle(title); fig.savefig(path,dpi=DPI)
+            plot_title(fig,name,ax); ax.set_ylabel('W m$^{-2}$'); ax.set_xlabel('Latitude'); ax.xaxis.set_major_formatter(FuncFormatter(latlabel)); ax.set_xlim(-90,90); ax.set_xticks(np.arange(-90,91,30)); ax.grid(alpha=.5,linestyle=':'); ax.legend(fontsize=7,loc='upper center',bbox_to_anchor=(.5,-.18))
+        plot_title(fig,title); fig.savefig(path,dpi=DPI)
     finally: plt.close(fig)
