@@ -163,14 +163,18 @@ command. Activate your Python environment and set GEOSUTIL before submitting.
   run list is needed. Run-name prefixes prevent overwrites; logs stay in place.
   To collect only, without submitting jobs, set `collections = ()` in the launcher.
 - `coastlines`: optional offline coastline shapefile.
-- `srb_climatology = 1`, `srb_begdate = 198307`, `srb_enddate = 200506`:
-  deliberately compare the model seasonal mean against the older SRB period.
-  Set the switch to 0 to require actual model dates instead. This affects SRB
-  only. Other observations and experiment comparisons keep their own dates.
-- ISCCP has its own optional begin/end dates and climatology switch. Empty dates
-  and switch 0 retain actual-date comparison. Binary .tabl files are recognized
-  even when an installed RC labels them HDF. Remaining missing data or unsupported
-  layouts are reported explicitly; there is no silent fallback to another period.
+- Observations and operational reanalyses first use the requested dates. If
+  no usable seasonal data overlap those dates, they use available seasonal
+  climatology automatically. Notices and provenance record the fallback period;
+  map and profile comparisons label climatology. Missing variables and malformed
+  files remain explicit errors.
+- ISCCP uses CLDLOW, CLDMID, CLDHI and CLDTOT, scaled by 0.01, for
+  CLDLO, CLDMD, CLDHI and CLDTT respectively, as in GEOS VERIFICATION.ISCCP.rc.
+  Find the four comparison maps with `*CLD*_SOLAR_map_vs_ISCCP.png`.
+  Optional ISCCP/SRB date and climatology settings select an explicit historical
+  period. Empty dates use the automatic policy above.
+- Chronological QBO plots still require common actual dates: a climatology is
+  not a substitute for interannual evolution.
 
 The Slurm resource requests remain in `gcm_python.j`. One job processes one
 collection serially; separate collection jobs run in parallel.
