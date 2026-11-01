@@ -9,6 +9,7 @@ from matplotlib.ticker import ScalarFormatter
 from matplotlib.lines import Line2D
 from . import render
 from .data import zonal, mean, paired
+from .verification import comparison_climatology
 from .diagnostics import calculate, compatible, supports
 
 PROFILES={('T','DYN'):(-85,0,85),('U','DYN'):(-30,0,30),
@@ -127,8 +128,11 @@ def special_products(model,refs,collections,variables,plots,season,results,recor
                     if not supports(ref,key): continue
                     rtag=tag+'_vs_'+re.sub(r'[^A-Za-z0-9_.-]','_',ref.name)
                     try:
-                        rr=compatible(raw,calculate(ref,key,col)); l,r,months=paired(raw,rr,getattr(ref,'climatology',False))
-                        groups.append((rtag,[(model.name,mean(l)),(ref.name,mean(r))]))
+                        rr=compatible(raw,calculate(ref,key,col))
+                        use_clim=comparison_climatology(ref,raw,rr)
+                        l,r,months=paired(raw,rr,use_clim)
+                        ref_label=ref.name + (f' (climatology {rr.time.dt.year.min().item()}–{rr.time.dt.year.max().item()})' if use_clim else '')
+                        groups.append((rtag,[(model.name,mean(l)),(ref_label,mean(r))]))
                     except Exception as exc: record_error(rtag,exc,'unavailable')
                 for name,series in groups:
                     title=f'Zonal Mean {key[0]} {season}; {model.window[0]}–{model.window[1]}'
