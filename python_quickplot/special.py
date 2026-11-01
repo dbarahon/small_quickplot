@@ -36,7 +36,7 @@ def profiles(series,key,path,title):
             if not lows: raise ValueError(f'No profile data at latitude {lat}')
             pressure(ax,min(lows),max(highs),key[0]=='T')
             ax.set_title(f'Latitude: {lat:g}'); ax.set_xlabel(series[0][1].attrs.get('units','')); ax.legend(fontsize=7)
-        fig.suptitle(title); fig.savefig(path,dpi=render.DPI)
+        render.plot_title(fig,title); fig.savefig(path,dpi=render.DPI)
     finally: plt.close(fig)
 
 
@@ -49,7 +49,7 @@ def latitude_profiles(series,key,path,title):
                     z=zonal(a).interp(lev=lev); ax.plot(z.lat,z,label=label)
             ax.set_title(f'{lev} hPa'); ax.set_xlim(-90,90); ax.grid(linestyle=':'); ax.legend(fontsize=7)
             ax.set_xlabel('Latitude'); ax.set_ylabel(series[0][1].attrs.get('units',''))
-        fig.suptitle(title); fig.savefig(path,dpi=render.DPI)
+        render.plot_title(fig,title); fig.savefig(path,dpi=render.DPI)
     finally: plt.close(fig)
 
 
@@ -80,8 +80,8 @@ def qbo(series,path,title):
             pressure(ax,float(z.lev.min()),float(z.lev.max()))
             ticks=np.array([.1,1,10,100,1000])
             ax.set_yticks(ticks[(ticks>=float(z.lev.min())) & (ticks<=float(z.lev.max()))])
-            ax.set_title(label); fig.colorbar(im,ax=ax,orientation='horizontal',pad=.08,label='U (m s⁻¹)')
-        fig.suptitle(title+'; 10S–10N, all available months'); fig.savefig(path,dpi=render.DPI)
+            render.plot_title(fig,label,ax); fig.colorbar(im,ax=ax,orientation='horizontal',pad=.08,label='U (m s⁻¹)')
+        render.plot_title(fig,title+'; 10S–10N, all available months'); fig.savefig(path,dpi=render.DPI)
     finally: plt.close(fig)
 
 
@@ -109,7 +109,8 @@ def vortex(series,path,title):
             handles.append(Line2D([0],[0],color=color,label=label))
         pressure(ax,max(.1,min(float(a.lev.min()) for _,a in series)),100)
         ax.set_xticks(x,['Sep','Oct','Nov','Dec','Jan','Feb','Mar','Apr'])
-        ax.legend(handles=handles,fontsize=8); ax.set_title(title+'\n50–70S; monthly climatology; dotted zero contours: ±1 SD when n≥2')
+        ax.legend(handles=handles,fontsize=8); render.plot_title(fig,title+'; 50–70S; monthly clim.',ax)
+        ax.text(.01,.01,'Dotted zero contours: ±1 SD (n≥2)',transform=ax.transAxes,fontsize=7)
         fig.savefig(path,dpi=render.DPI)
     finally: plt.close(fig)
 
