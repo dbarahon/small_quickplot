@@ -9,10 +9,10 @@ from matplotlib.ticker import ScalarFormatter, FuncFormatter, MaxNLocator, NullF
 from data import zonal
 
 
-DPI = 150
+DPI = 100
 DIFFERENCE_PERCENTILE = 95.0
 
-def configure(dpi=150, difference_percentile=95):
+def configure(dpi=100, difference_percentile=95):
     global DPI, DIFFERENCE_PERCENTILE
     DPI = dpi
     DIFFERENCE_PERCENTILE = difference_percentile
