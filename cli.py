@@ -36,7 +36,7 @@ def parser():
     p.add_argument('--obs-begdate'); p.add_argument('--obs-enddate')
     p.add_argument('--coastlines',type=Path,help='Offline Natural Earth line shapefile (requires Cartopy)')
     p.add_argument('--save-fields',action='store_true'); p.add_argument('--output',type=Path,required=True)
-    p.add_argument('--dpi',type=int,default=150)
+    p.add_argument('--dpi',type=int,default=100)
     p.add_argument('--difference-percentile',type=float,default=95)
     p.add_argument('--unify-plots',type=Path)
     p.add_argument('--special-plots',action='store_true')
