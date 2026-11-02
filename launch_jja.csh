@@ -15,7 +15,7 @@ set variables = ()           # Empty = all; example: ( precip toa_radz )
 set do_verification = 1      # 1 = observations enabled; 0 = disabled
 set do_zonal = 1
 set save_fields = 0
-set dpi = 150                   # Increase to 300 for publication/export.
+set dpi = 100                   # Output resolution; increase for publication.
 set difference_percentile = 95   # 100 = full range; smaller emphasizes differences.
 set special_plots = 1           # Profiles, QBO and vortex (needs Sep-Apr data).
 set unify_folder = "$experiment/pyPlots-CLIM"  # Empty disables collection.
