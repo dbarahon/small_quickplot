@@ -31,7 +31,7 @@ def test_isccp_month_only_date(tmp_path):
 
 
 def test_descriptor_window_and_metadata_reuse(tmp_path,monkeypatch):
-    from python_quickplot import data
+    import data
     from verification import descriptor_files
     paths=[]
     for year in (2008,2009,2010):
@@ -62,7 +62,7 @@ def test_descriptor_window_and_metadata_reuse(tmp_path,monkeypatch):
 
 
 def test_time_subset_before_normalize(tmp_path,monkeypatch):
-    from python_quickplot import data
+    import data
     a=xr.DataArray(np.ones((12,2,2)),dims=('time','lat','lon'),
         coords={'time':np.arange('2009-01','2010-01',dtype='datetime64[M]'),
                 'lat':[-45,45],'lon':[0,180]})
