@@ -20,7 +20,25 @@ Edit `launch_jja.csh` to set the experiment, season, collections, dates, compari
 tcsh launch_jja.csh
 ```
 
-The launcher submits `gcm_python.j` jobs for selected collections. Set `unify_folder` in the launcher to collect figures in one directory. Set `special_plots = 1` to include profiles, QBO and vortex plots.
+The launcher submits one `gcm_python.j` job per collection. Edit these settings:
+
+| Setting | Purpose |
+|---|---|
+| `experiment`, `compare_experiment` | Model directory and optional comparison run (empty disables comparison). |
+| `collections`, `variables` | Collections to plot; empty `variables` plots all available diagnostics. |
+| `season`, `begdate`, `enddate` | Season and date range (`YYYYMM`). |
+| `levels` | Pressure levels in hPa, e.g. `"850,500,250"`. |
+| `do_verification`, `do_zonal` | Enable/disable observation comparisons and zonal sections (1/0). |
+| `save_fields` | Save plotted arrays to NetCDF (1/0). |
+| `dpi` | PNG resolution (default **100**). |
+| `difference_percentile` | Difference color-scale range (95 by default; 100 for full range). |
+| `special_plots` | Include profiles, QBO, and vortex plots (1/0). |
+| `unify_folder` | Collect figures in one folder; empty disables collection. |
+| `coastlines` | Optional offline coastline shapefile path. |
+| `isccp_*`, `srb_*` | Optional verification date ranges and climatology switches. |
+| `extra_options` | Additional CLI arguments. |
+
+The launcher also sets `verification_dir` and `verification_root` for observation data.
 
 ## Run directly
 
@@ -38,7 +56,7 @@ Use a new `--output` directory for each run. Figures go into `plots/`, with `sum
 Useful options:
 
 - `--variables T:DYN precip toa_radz` selects individual variables or diagnostics.
-- `--levels 850 500 250` selects pressure levels; `--no-zonal` omits zonal sections.
+- `--levels 850,500,250` selects pressure levels; `--no-zonal` omits zonal sections.
 - `--compare /path/to/other/experiment` adds a model comparison (repeatable).
 - `--no-verification` runs without observational verification.
 - `--config example_config.json` provides custom input mappings (edit example paths first).
