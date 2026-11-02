@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
-from python_quickplot import render
+import render
 from special import profiles, qbo, vortex, band
 from unify_plots import unify
 from verification import Observation
