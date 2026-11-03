@@ -145,7 +145,7 @@ def read_files(paths, alias, begin, end, season):
         if len(indices): selected.append((path,actual,time,indices))
     print(f'READ {alias}: {len(selected)}/{len(paths)} files for {begin}–{end} {season}',flush=True)
     for path,actual,time,indices in selected:
-        with xr.open_dataset(path) as ds:
+        with open_geos_dataset(path) as ds:
             # Subset before sorting/reindexing can materialize backend data.
             a=normalize(ds[actual].isel({time:indices})).load()
             chunks.append(a); origins.extend([str(path)]*a.sizes['time'])
