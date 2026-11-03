@@ -167,6 +167,7 @@ def main(argv=None):
                         stat=metrics(lv,rv) if kind!='zonal' else None
                         panels([lv,rv,delta],[model.name,ref.name,'Model − reference'],f'{display_label} {str(level)+" hPa" if level else kind} {a.season}; {len(months)} common months' + (f' (climatology: model {a.begdate}–{a.enddate}; reference {reference_period[0]}–{reference_period[-1]})' if use_clim else ''),plots/(rtag+'.png'),section=kind=='zonal',precip=key=='precip',coastlines=a.coastlines)
                         results.append(dict(task=rtag,state='ok',months=months,metrics=stat,climatology=use_clim,reference_period=[str(reference_period[0]),str(reference_period[-1])]))
+                        print(f'COMPLETED {rtag}: {len(months)} common calendar months', flush=True)
                         if a.save_fields: xr.Dataset(dict(model=lv,reference=rv,difference=delta)).to_netcdf(a.output/(rtag+'.nc'))
                         if key=='precip': precip_profile([(model.name,lv),(ref.name,rv)],plots/(rtag+'_profile.png'),f'Precipitation {a.season}')
                     except Exception as exc: record_error(rtag,exc,'unavailable')
