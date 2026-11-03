@@ -14,19 +14,19 @@ Set `GEOSUTIL` to your GEOS utilities directory. Verification resource files are
 
 ## Run with Slurm (recommended on Discover)
 
-Edit `launch_jja.csh` to set the experiment, season, collections, dates, comparison experiments and output options. Then run from the repository root:
+Edit `launch_jja.csh` to set the experiment, seasons, collections, dates, comparison experiments and output options. Then run from the repository root:
 
 ```csh
 tcsh launch_jja.csh
 ```
 
-The launcher submits one `gcm_python.j` job per collection. Edit these settings:
+The launcher submits one `gcm_python.j` job per season and collection. Set `seasons = ( JJA DJF )` to plot both seasons separately. Edit these settings:
 
 | Setting | Purpose |
 |---|---|
 | `experiment`, `compare_experiment` | Model directory and optional comparison run (empty disables comparison). |
 | `collections`, `variables` | Collections to plot; empty `variables` plots all available diagnostics. |
-| `season`, `begdate`, `enddate` | Season and date range (`YYYYMM`). |
+| `seasons`, `begdate`, `enddate` | Seasons (e.g. `( JJA DJF )`) and date range (`YYYYMM`). |
 | `levels` | Pressure levels in hPa, e.g. `"850,500,250"`. |
 | `do_verification`, `do_zonal` | Enable/disable observation comparisons and zonal sections (1/0). |
 | `save_fields` | Save plotted arrays to NetCDF (1/0). |
