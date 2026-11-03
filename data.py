@@ -39,7 +39,19 @@ def open_geos_dataset(path):
             if not np.issubdtype(offsets.dtype, np.number) or not np.all(np.isfinite(offsets)) or not np.all(offsets == np.rint(offsets)):
                 raise ValueError(f"Non-integer month offsets in {path}; cannot infer dates safely") from exc
             start = np.datetime64(f"{int(match[1]):04d}-{int(match[2]):02d}", "M")
-            dates = (start + offsets.astype("timedelta64[M]")).astype("datetime64[ns]")
+            month_offsets = offsets.astype("int64")
+            # Some legacy products number months from 1 instead of 0.
+            # Correct only when the filename's YYYYMM-YYYYMM interval verifies
+            # the convention; do not guess for other monthly datasets.
+            period = re.search(r"(\\d{6})-(\\d{6})", Path(path).name)
+            if period is not None and len(month_offsets):
+                first = np.datetime64(period[1][:4] + "-" + period[1][4:], "M")
+                last = np.datetime64(period[2][:4] + "-" + period[2][4:], "M")
+                if (first == start and last - first == np.timedelta64(len(month_offsets)-1, "M")
+                        and np.array_equal(month_offsets, np.arange(1,len(month_offsets)+1))):
+                    month_offsets = month_offsets - 1
+                    print(f"NOTICE: detected one-based monthly offsets in {path}", flush=True)
+            dates = (start + month_offsets.astype("timedelta64[M]")).astype("datetime64[ns]")
             ds = ds.assign_coords({time_name: (coord.dims, dates)})
             print(f"NOTICE: decoded non-CF monthly time offsets in {path}: {units}", flush=True)
         except Exception:
