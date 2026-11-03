@@ -73,3 +73,38 @@ def test_time_subset_before_normalize(tmp_path,monkeypatch):
         return original(field)
     monkeypatch.setattr(data,'normalize',check_subset)
     assert read_files([str(path)],'T','200906','200908','JJA').sizes['time']==3
+
+
+
+def test_non_cf_month_offsets_for_isccp(tmp_path):
+    # Monthly offsets with a standard calendar are not valid CF time units.
+    raw = xr.Dataset(
+        {"CLDTOT": (("time", "lat", "lon"), np.ones((4, 2, 2)))},
+        coords={"time": ("time", np.arange(4, dtype="int32"),
+                             {"units": "months since 1983-07", "calendar": "standard"}),
+                "lat": [-45, 45], "lon": [0, 180]},
+    )
+    path = tmp_path / "isccp.nc"
+    raw.to_netcdf(path)
+    from data import open_geos_dataset, file_metadata
+    with open_geos_dataset(path) as ds:
+        assert list(ds.time.dt.strftime("%Y%m").values) == [
+            "198307", "198308", "198309", "198310"
+        ]
+    file_metadata.cache_clear()
+    result = read_files([str(path)], "CLDTOT", "198307", "198308", "JJA")
+    assert list(result.time.dt.strftime("%Y%m").values) == ["198307", "198308"]
+
+
+def test_month_offsets_must_be_integral(tmp_path):
+    raw = xr.Dataset(
+        {"cloud": ("time", [1., 2.])},
+        coords={"time": ("time", [0., 1.5],
+                             {"units": "months since 1983-07", "calendar": "standard"})},
+    )
+    path = tmp_path / "fractional_months.nc"
+    raw.to_netcdf(path)
+    from data import open_geos_dataset
+    with pytest.raises(ValueError, match="Non-integer month offsets"):
+        with open_geos_dataset(path):
+            pass
