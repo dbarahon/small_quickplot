@@ -1,5 +1,6 @@
 """HISTORY aliases, bounded file reads, coordinate normalization and averaging."""
 from pathlib import Path
+from contextlib import contextmanager
 import re
 from functools import lru_cache
 import numpy as np
@@ -7,6 +8,47 @@ import xarray as xr
 
 SEASONS = dict(ANN=list(range(1,13)), DJF=[12,1,2], MAM=[3,4,5], JJA=[6,7,8], SON=[9,10,11])
 SEASONS.update({m:[i+1] for i,m in enumerate('JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC'.split())})
+
+
+
+@contextmanager
+def open_geos_dataset(path):
+    """Open a NetCDF file, including non-CF integer 'months since' time axes.
+
+    Standard CF decoding is always attempted first. Only a monthly offset
+    with a Gregorian calendar is reconstructed; other decoding errors remain
+    visible rather than assigning potentially incorrect dates.
+    """
+    try:
+        ds = xr.open_dataset(path)
+    except ValueError as exc:
+        if "unable to decode time units" not in str(exc).lower() or "months since" not in str(exc).lower():
+            raise
+        ds = xr.open_dataset(path, decode_times=False)
+        try:
+            time_name = next((k for k in ds.coords if k.lower() in ("time", "valid_time")), None)
+            if time_name is None:
+                raise ValueError(f"Missing time coordinate in {path}") from exc
+            coord = ds[time_name]
+            units = str(coord.attrs.get("units", ""))
+            calendar = str(coord.attrs.get("calendar", "standard")).lower()
+            match = re.fullmatch(r"\s*months\s+since\s+(\d{4})-(\d{1,2})(?:-01)?(?:\s+00:00(?::00)?)?\s*", units, re.I)
+            if not match or calendar not in ("standard", "gregorian", "proleptic_gregorian"):
+                raise ValueError(f"Unsupported monthly time units/calendar in {path}: {units!r}, {calendar!r}") from exc
+            offsets = np.asarray(coord.values)
+            if not np.issubdtype(offsets.dtype, np.number) or not np.all(np.isfinite(offsets)) or not np.all(offsets == np.rint(offsets)):
+                raise ValueError(f"Non-integer month offsets in {path}; cannot infer dates safely") from exc
+            start = np.datetime64(f"{int(match[1]):04d}-{int(match[2]):02d}", "M")
+            dates = (start + offsets.astype("timedelta64[M]")).astype("datetime64[ns]")
+            ds = ds.assign_coords({time_name: (coord.dims, dates)})
+            print(f"NOTICE: decoded non-CF monthly time offsets in {path}: {units}", flush=True)
+        except Exception:
+            ds.close()
+            raise
+    try:
+        yield ds
+    finally:
+        ds.close()
 
 
 def history(path):
@@ -85,7 +127,7 @@ def select_time(a, begin, end, season):
 @lru_cache(maxsize=8192)
 def file_metadata(path):
     """Cache time coordinates and variable names, never gridded fields."""
-    with xr.open_dataset(path) as ds:
+    with open_geos_dataset(path) as ds:
         time=next((d for d in ds.coords if d.lower() in ('time','valid_time')),None)
         if time is None: raise ValueError('Time coordinate required: '+str(path))
         return tuple(ds.data_vars), time, ds[time].load()
