@@ -108,3 +108,24 @@ def test_month_offsets_must_be_integral(tmp_path):
     with pytest.raises(ValueError, match="Non-integer month offsets"):
         with open_geos_dataset(path):
             pass
+
+
+
+def test_one_based_isccp_months_follow_filename_period(tmp_path):
+    # Historical ISCCP uses 1..300 for July 1983 through June 2008.
+    path = tmp_path / "ISCCP_totlowmidhgh_cldcover_198307-200806.nc"
+    raw = xr.Dataset(
+        {"CLDTOT": (("time", "lat", "lon"), np.ones((300, 2, 2)))},
+        coords={"time": ("time", np.arange(1, 301, dtype="int32"),
+                             {"units": "months since 1983-07", "calendar": "standard"}),
+                "lat": [-45, 45], "lon": [0, 180]},
+    )
+    raw.to_netcdf(path)
+    from data import open_geos_dataset, file_metadata
+    with open_geos_dataset(path) as ds:
+        assert str(ds.time.dt.strftime("%Y%m").values[0]) == "198307"
+        assert str(ds.time.dt.strftime("%Y%m").values[-1]) == "200806"
+    file_metadata.cache_clear()
+    summer = read_files([str(path)], "CLDTOT", "000101", "999912", "JJA")
+    assert str(summer.time.dt.strftime("%Y%m").values[0]) == "198307"
+    assert str(summer.time.dt.strftime("%Y%m").values[-1]) == "200806"
