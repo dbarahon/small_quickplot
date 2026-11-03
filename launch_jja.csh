@@ -7,7 +7,7 @@ set experiment = /gpfsm/dnb34/dbarahon/DEV/v1102_MG3L91
 set compare_experiment = ""   # Reference experiment root; empty disables comparison.
 # Example: set compare_experiment = "/gpfsm/dnb34/dbarahon/DEV/reference_run"
 set collections = ( geosgcm_surf geosgcm_prog geosgcm_moist geosgcm_aercloud )
-set season = JJA
+set seasons = ( JJA )          # Example: ( JJA DJF )
 set begdate = 200906
 set enddate = 200908
 set levels = "850,500,250"
@@ -32,8 +32,10 @@ set extra_options = ()
 
 # Collect existing seasonal plots locally; no Slurm job or replotting needed.
 if ( "$unify_folder" != "" ) then
-    python3 unify_plots.py --experiment "$experiment" --season "$season" --destination "$unify_folder"
-    if ( $status != 0 ) exit 1
+    foreach season ( $seasons )
+        python3 unify_plots.py --experiment "$experiment" --season "$season" --destination "$unify_folder"
+        if ( $status != 0 ) exit 1
+    end
 endif
 if ( ! $?GEOSUTIL ) then
     echo "Set GEOSUTIL to your GEOS install directory first."
@@ -73,11 +75,13 @@ if ( $do_verification == 0 ) set options = ( $options:q --no-verification )
 if ( $do_zonal == 0 ) set options = ( $options:q --no-zonal )
 if ( $save_fields == 1 ) set options = ( $options:q --save-fields )
 
-foreach collection ( $collections )
-    sbatch --job-name="py_${collection}" gcm_python.j \
-        "$experiment" "$collection" "$season" "$begdate" "$enddate" "$levels" \
-        --geosutil "$GEOSUTIL" \
-        --verification-dir "$verification_dir" \
-        --verification-root "$verification_root" $options:q $extra_options:q
-    if ( $status != 0 ) exit 1
+foreach season ( $seasons )
+    foreach collection ( $collections )
+        sbatch --job-name="py_${season}_${collection}" gcm_python.j \
+            "$experiment" "$collection" "$season" "$begdate" "$enddate" "$levels" \
+            --geosutil "$GEOSUTIL" \
+            --verification-dir "$verification_dir" \
+            --verification-root "$verification_root" $options:q $extra_options:q
+        if ( $status != 0 ) exit 1
+    end
 end
