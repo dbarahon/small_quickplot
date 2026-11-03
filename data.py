@@ -43,7 +43,7 @@ def open_geos_dataset(path):
             # Some legacy products number months from 1 instead of 0.
             # Correct only when the filename's YYYYMM-YYYYMM interval verifies
             # the convention; do not guess for other monthly datasets.
-            period = re.search(r"(\\d{6})-(\\d{6})", Path(path).name)
+            period = re.search(r"([0-9]{6})-([0-9]{6})", Path(path).name)
             if period is not None and len(month_offsets):
                 first = np.datetime64(period[1][:4] + "-" + period[1][4:], "M")
                 last = np.datetime64(period[2][:4] + "-" + period[2][4:], "M")
